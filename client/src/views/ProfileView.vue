@@ -43,7 +43,7 @@ async function save() {
       shared: form.value.shared,
     });
     await loadSession(true); // refresh name/onboarded in the shell
-    if (wasOnboarding) router.push("/diary");
+    if (wasOnboarding) router.push("/");
   } finally {
     saving.value = false;
   }

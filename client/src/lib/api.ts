@@ -1,4 +1,4 @@
-import type { Day, Food, Profile } from "./types";
+import type { Day, Profile } from "./types";
 import { redirectToLogin } from "./session";
 
 async function asJSON<T>(res: Response): Promise<T> {
@@ -44,14 +44,6 @@ export const api = {
 
   deleteEntry: (date: string, id: number) =>
     fetch(`/api/entries/${id}?date=${date}`, { method: "DELETE" }).then((r) => asJSON<Day>(r)),
-
-  listFoods: () => fetch("/api/foods").then((r) => asJSON<Food[]>(r)),
-
-  createFood: (body: Partial<Food>) =>
-    fetch("/api/foods", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then((r) => asJSON<Food[]>(r)),
-
-  deleteFood: (id: number) =>
-    fetch(`/api/foods/${id}`, { method: "DELETE" }).then((r) => asJSON<Food[]>(r)),
 
   getProfile: () => fetch("/api/profile").then((r) => asJSON<Profile>(r)),
 

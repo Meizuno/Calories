@@ -3,10 +3,6 @@ import { computed } from "vue";
 import { RouterLink, RouterView } from "vue-router";
 import { session, login, logout } from "./lib/session";
 
-const navLinks = [
-  { to: "/diary", label: "Deník" },
-  { to: "/catalog", label: "Potraviny" },
-];
 const profileName = computed(() => session.profile?.name?.trim() || "");
 const initial = computed(() => (profileName.value ? profileName.value.charAt(0).toUpperCase() : "🙂"));
 </script>
@@ -23,14 +19,6 @@ const initial = computed(() => (profileName.value ? profileName.value.charAt(0).
         </RouterLink>
 
         <nav v-if="session.authenticated" class="flex items-center gap-1">
-          <RouterLink
-            v-for="l in navLinks"
-            :key="l.to"
-            :to="l.to"
-            class="rounded-lg px-2.5 py-1.5 text-sm text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
-            active-class="bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white"
-          >{{ l.label }}</RouterLink>
-
           <RouterLink
             to="/profiles/me"
             class="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition hover:bg-gray-100 dark:hover:bg-gray-800"

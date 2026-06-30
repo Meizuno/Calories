@@ -32,17 +32,6 @@ export interface Day {
   meals: Meal[];
 }
 
-export interface Food {
-  id: number;
-  name: string;
-  basisUnit: string;
-  basisAmount: number;
-  kcal: number;
-  carb: number;
-  protein: number;
-  fat: number;
-}
-
 export interface Profile {
   publicId: string;
   name: string;
