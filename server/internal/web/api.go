@@ -223,6 +223,60 @@ func (h *Handlers) respondDay(w http.ResponseWriter, r *http.Request, profileID 
 	writeJSON(w, dayDTO(dv))
 }
 
+// LogMeal (PAT only, scope "add") creates a whole meal in one request — name,
+// optional note and its ad-hoc entries. This is the endpoint a chat assistant
+// posts to; see the README for the body schema. Responds with the updated day.
+func (h *Handlers) LogMeal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Date    string `json:"date"`
+		Meal    string `json:"meal"`
+		Note    string `json:"note"`
+		Entries []struct {
+			Name     string  `json:"name"`
+			Quantity float64 `json:"quantity"`
+			Unit     string  `json:"unit"`
+			Kcal     float64 `json:"kcal"`
+			Carb     float64 `json:"carb"`
+			Protein  float64 `json:"protein"`
+			Fat      float64 `json:"fat"`
+		} `json:"entries"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	name := strings.TrimSpace(req.Meal)
+	if name == "" {
+		http.Error(w, "meal name is required", http.StatusBadRequest)
+		return
+	}
+	entries := make([]service.EntryInput, 0, len(req.Entries))
+	for _, e := range req.Entries {
+		n := strings.TrimSpace(e.Name)
+		if n == "" || e.Quantity <= 0 {
+			continue
+		}
+		entries = append(entries, service.EntryInput{
+			Name:     n,
+			Unit:     strings.TrimSpace(e.Unit),
+			Quantity: e.Quantity,
+			Kcal:     nonNeg(e.Kcal),
+			Carb:     nonNeg(e.Carb),
+			Protein:  nonNeg(e.Protein),
+			Fat:      nonNeg(e.Fat),
+		})
+	}
+	if len(entries) == 0 {
+		http.Error(w, "at least one entry with a name and positive quantity is required", http.StatusBadRequest)
+		return
+	}
+	pid, date := ProfileID(r.Context()), parseDate(req.Date)
+	if _, err := h.diary.LogMeal(r.Context(), pid, date, name, strings.TrimSpace(req.Note), entries); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.respondDay(w, r, pid, date)
+}
+
 // ── Catalog endpoints ────────────────────────────────────────────────────────
 
 func (h *Handlers) ListFoods(w http.ResponseWriter, r *http.Request) {

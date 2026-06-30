@@ -104,3 +104,61 @@ curl -X DELETE https://calories.meizuno.com/api/pats/<id> -b "access_token=$C"  
 # use the PAT (no cookie):
 curl https://calories.meizuno.com/api/day -H "Authorization: Bearer cal_pat_…"
 ```
+
+### Log a meal — `POST /api/log` (PAT only, scope `add`)
+The endpoint a chat assistant posts to: it creates a whole meal — name, optional
+note and its entries — in one call, and returns the updated day. **PAT only** — a
+browser session is rejected (use the diary UI for that). Macros are per the whole
+entry as stated (not per 100 g); the server clamps negatives to 0 and skips
+entries without a name or with a non-positive quantity.
+
+```bash
+curl -X POST https://calories.meizuno.com/api/log \
+  -H "Authorization: Bearer cal_pat_…" -H 'Content-Type: application/json' -d '{
+    "date": "2026-06-30",
+    "meal": "Oběd",
+    "note": "doma",
+    "entries": [
+      {"name": "Kuřecí prsa", "quantity": 200, "unit": "g", "kcal": 330, "carb": 0,  "protein": 62, "fat": 7},
+      {"name": "Rýže",        "quantity": 150, "unit": "g", "kcal": 195, "carb": 42, "protein": 4,  "fat": 1}
+    ]
+  }'
+```
+
+Request body — the JSON Schema to hand the assistant (e.g. as a tool definition):
+
+```json
+{
+  "type": "object",
+  "required": ["meal", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "date": {
+      "type": "string", "format": "date",
+      "description": "YYYY-MM-DD; defaults to today (UTC) if omitted"
+    },
+    "meal": {
+      "type": "string", "minLength": 1,
+      "description": "Meal name, e.g. Snídaně / Oběd / Večeře / Svačina"
+    },
+    "note": { "type": "string", "description": "Optional free-text note for the meal" },
+    "entries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "quantity"],
+        "additionalProperties": false,
+        "properties": {
+          "name":     { "type": "string", "minLength": 1, "description": "Food name" },
+          "quantity": { "type": "number", "exclusiveMinimum": 0, "description": "Amount eaten, in `unit`" },
+          "unit":     { "type": "string", "default": "g", "description": "g, ml, ks, porce, …" },
+          "kcal":     { "type": "number", "minimum": 0, "description": "Calories for this entry" },
+          "carb":     { "type": "number", "minimum": 0, "description": "Carbohydrates (g)" },
+          "protein":  { "type": "number", "minimum": 0, "description": "Protein (g)" },
+          "fat":      { "type": "number", "minimum": 0, "description": "Fat (g)" }
+        }
+      }
+    }
+  }
+}
+```

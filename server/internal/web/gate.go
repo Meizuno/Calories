@@ -73,6 +73,24 @@ func (g *Gate) Scope(scope string) func(http.Handler) http.Handler {
 	}
 }
 
+// PAT guards a route reachable ONLY with a personal access token that holds the
+// scope — a full browser session is rejected. For machine-only endpoints.
+func (g *Gate) PAT(scope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if IsFull(r.Context()) {
+				http.Error(w, "this endpoint requires a personal access token", http.StatusForbidden)
+				return
+			}
+			if !allowed(r.Context(), scope) {
+				http.Error(w, "forbidden", http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func allowed(ctx context.Context, scope string) bool {
 	if IsFull(ctx) {
 		return true

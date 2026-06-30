@@ -46,6 +46,11 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 			r.With(gate.Scope("")).Patch("/entries/{id}", h.UpdateEntry)
 			r.With(gate.Scope("")).Delete("/entries/{id}", h.DeleteEntry)
 
+			// Machine-only: log a full meal (name + note + entries) in one call.
+			// PAT only (a browser session is rejected) and needs the "add" scope —
+			// the endpoint a chat assistant posts to.
+			r.With(gate.PAT("add")).Post("/log", h.LogMeal)
+
 			// Food catalog (no UI yet; kept for the future food picker).
 			r.With(gate.Scope("read")).Get("/foods", h.ListFoods)
 			r.With(gate.Scope("add")).Post("/foods", h.CreateFood)

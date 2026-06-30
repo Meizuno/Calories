@@ -74,6 +74,51 @@ func (s *Diary) AddMeal(ctx context.Context, profileID int64, date time.Time, na
 	return err
 }
 
+// EntryInput is one ad-hoc line for LogMeal; macros are taken as given (the
+// caller clamps them).
+type EntryInput struct {
+	Name, Unit                         string
+	Quantity, Kcal, Carb, Protein, Fat float64
+}
+
+// LogMeal creates a meal (with optional note) and all of its ad-hoc entries in a
+// single call — the shape a chat assistant logs through the PAT API. Blank-named
+// or non-positive-quantity entries are skipped. Returns the new meal id.
+func (s *Diary) LogMeal(ctx context.Context, profileID int64, date time.Time, name, note string, entries []EntryInput) (int64, error) {
+	pos, err := s.q.MaxMealPosition(ctx, db.MaxMealPositionParams{ProfileID: profileID, Date: date})
+	if err != nil {
+		return 0, err
+	}
+	meal, err := s.q.CreateMeal(ctx, db.CreateMealParams{ProfileID: profileID, Date: date, Name: name, Position: pos + 1, Note: strPtr(note)})
+	if err != nil {
+		return 0, err
+	}
+	for i, e := range entries {
+		if e.Name == "" || e.Quantity <= 0 {
+			continue
+		}
+		unit := e.Unit
+		if unit == "" {
+			unit = "g"
+		}
+		if _, err := s.q.CreateEntry(ctx, db.CreateEntryParams{
+			MealID:   meal.ID,
+			FoodID:   nil,
+			Name:     e.Name,
+			Quantity: e.Quantity,
+			Unit:     unit,
+			Position: int32(i + 1),
+			Kcal:     e.Kcal,
+			Carb:     e.Carb,
+			Protein:  e.Protein,
+			Fat:      e.Fat,
+		}); err != nil {
+			return meal.ID, err
+		}
+	}
+	return meal.ID, nil
+}
+
 func (s *Diary) DeleteMeal(ctx context.Context, profileID, mealID int64) error {
 	return s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID})
 }
