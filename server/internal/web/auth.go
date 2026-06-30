@@ -13,6 +13,8 @@ type ctxKey int
 const (
 	userIDKey ctxKey = iota
 	profileIDKey
+	scopesKey
+	fullKey
 )
 
 // UserID returns the authenticated external user id placed in the context by Auth.
@@ -21,9 +23,21 @@ func UserID(ctx context.Context) string {
 	return v
 }
 
-// ProfileID returns the local profile id placed in the context by ProfileResolver.
+// ProfileID returns the local profile id placed in the context by the Gate.
 func ProfileID(ctx context.Context) int64 {
 	v, _ := ctx.Value(profileIDKey).(int64)
+	return v
+}
+
+// Scopes returns the granted scopes for a PAT principal (nil for a full session).
+func Scopes(ctx context.Context) []string {
+	v, _ := ctx.Value(scopesKey).([]string)
+	return v
+}
+
+// IsFull reports whether the caller is a full session (vs a scoped PAT).
+func IsFull(ctx context.Context) bool {
+	v, _ := ctx.Value(fullKey).(bool)
 	return v
 }
 

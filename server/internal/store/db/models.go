@@ -6,6 +6,8 @@ package db
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Entry struct {
@@ -44,6 +46,18 @@ type Meal struct {
 	Name      string
 	Position  int32
 	Note      *string
+}
+
+type PersonalAccessToken struct {
+	ID         int64
+	ProfileID  int64
+	Name       string
+	TokenHash  string
+	Scopes     []string
+	CreatedAt  time.Time
+	LastUsedAt pgtype.Timestamptz
+	ExpiresAt  pgtype.Timestamptz
+	RevokedAt  pgtype.Timestamptz
 }
 
 type Profile struct {

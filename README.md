@@ -83,3 +83,24 @@ Same-origin, so the shared `access_token` cookie reaches the API automatically;
 (and `AUTH_LOGOUT_URL` for sign-out). Locally, with no `AUTH_VALIDATE_URL`, it
 falls back to `DEV_USER_ID`. Deploy the single image as a `calories` service
 behind Traefik (`calories.<domain>`) with a `calories_user` Postgres role.
+
+## Personal access tokens (server-only)
+Programmatic API access without a browser. A PAT is sent as
+`Authorization: Bearer cal_pat_…` and is scoped to `read` (read the diary) and/or
+`add` (add meals/entries). Update, delete and all account/token management are
+**full-session only** (default-deny — a PAT can never reach them). Only the
+sha256 hash is stored (`personal_access_tokens`); the raw token is shown once.
+
+There is no UI — manage tokens over the API with a logged-in session cookie
+(`$C` = your `access_token`):
+
+```bash
+# create — the raw token is returned ONCE
+curl -X POST https://calories.meizuno.com/api/pats -b "access_token=$C" \
+  -H 'Content-Type: application/json' -d '{"name":"import","scopes":["read","add"]}'
+curl https://calories.meizuno.com/api/pats -b "access_token=$C"          # list
+curl -X DELETE https://calories.meizuno.com/api/pats/<id> -b "access_token=$C"  # revoke
+
+# use the PAT (no cookie):
+curl https://calories.meizuno.com/api/day -H "Authorization: Bearer cal_pat_…"
+```

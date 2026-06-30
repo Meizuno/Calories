@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -12,12 +13,14 @@ import (
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store/db"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Handlers struct {
 	diary        *service.Diary
 	catalog      *service.Catalog
 	profiles     *service.Profiles
+	tokens       *service.Tokens
 	auth         *Auth
 	loginURL     string
 	logoutURL    string
@@ -25,9 +28,9 @@ type Handlers struct {
 	httpClient   *http.Client
 }
 
-func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, auth *Auth, loginURL, logoutURL, cookieDomain string) *Handlers {
+func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, tokens *service.Tokens, auth *Auth, loginURL, logoutURL, cookieDomain string) *Handlers {
 	return &Handlers{
-		diary: diary, catalog: catalog, profiles: profiles, auth: auth,
+		diary: diary, catalog: catalog, profiles: profiles, tokens: tokens, auth: auth,
 		loginURL: loginURL, logoutURL: logoutURL, cookieDomain: cookieDomain,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
@@ -447,6 +450,96 @@ func (h *Handlers) SharedDay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, dayDTO(dv))
+}
+
+// ── Personal access tokens (full-session only) ───────────────────────────────
+
+type patResp struct {
+	ID         int64    `json:"id"`
+	Name       string   `json:"name"`
+	Scopes     []string `json:"scopes"`
+	CreatedAt  string   `json:"createdAt"`
+	LastUsedAt *string  `json:"lastUsedAt"`
+	ExpiresAt  *string  `json:"expiresAt"`
+}
+
+func tsPtr(t pgtype.Timestamptz) *string {
+	if !t.Valid {
+		return nil
+	}
+	s := t.Time.UTC().Format(time.RFC3339)
+	return &s
+}
+
+func patDTO(p db.PersonalAccessToken) patResp {
+	scopes := p.Scopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+	return patResp{
+		ID:         p.ID,
+		Name:       p.Name,
+		Scopes:     scopes,
+		CreatedAt:  p.CreatedAt.UTC().Format(time.RFC3339),
+		LastUsedAt: tsPtr(p.LastUsedAt),
+		ExpiresAt:  tsPtr(p.ExpiresAt),
+	}
+}
+
+func (h *Handlers) listPatsJSON(w http.ResponseWriter, r *http.Request, profileID int64) {
+	rows, err := h.tokens.List(r.Context(), profileID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]patResp, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, patDTO(p))
+	}
+	writeJSON(w, out)
+}
+
+func (h *Handlers) ListPats(w http.ResponseWriter, r *http.Request) {
+	h.listPatsJSON(w, r, ProfileID(r.Context()))
+}
+
+func (h *Handlers) CreatePat(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name      string   `json:"name"`
+		Scopes    []string `json:"scopes"`
+		ExpiresAt string   `json:"expiresAt"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	scopes := service.CleanScopes(req.Scopes)
+	if name == "" || len(scopes) == 0 {
+		http.Error(w, "name and at least one scope are required", http.StatusBadRequest)
+		return
+	}
+	var exp *time.Time
+	if req.ExpiresAt != "" {
+		if t, err := time.Parse(time.RFC3339, req.ExpiresAt); err == nil {
+			exp = &t
+		}
+	}
+	raw, row, err := h.tokens.Create(r.Context(), ProfileID(r.Context()), name, scopes, exp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// The raw token is returned exactly once, here.
+	writeJSON(w, map[string]any{"token": raw, "pat": patDTO(row)})
+}
+
+func (h *Handlers) RevokePat(w http.ResponseWriter, r *http.Request) {
+	pid := ProfileID(r.Context())
+	if err := h.tokens.Revoke(r.Context(), pid, idParam(r)); err != nil && !errors.Is(err, service.ErrTokenNotFound) {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.listPatsJSON(w, r, pid)
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────

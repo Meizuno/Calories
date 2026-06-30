@@ -36,13 +36,14 @@ func main() {
 	diary := service.NewDiary(st.Queries)
 	catalog := service.NewCatalog(st.Queries)
 	profiles := service.NewProfiles(st.Queries)
+	tokens := service.NewTokens(st.Queries)
 
 	auth := web.NewAuth(cfg.AuthValidateURL, cfg.AuthRefreshURL, cfg.DevUserID)
-	h := web.NewHandlers(diary, catalog, profiles, auth, cfg.AuthLoginURL, cfg.AuthLogoutURL, cfg.CookieDomain)
-	resolver := web.NewProfileResolver(profiles)
+	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, cfg.AuthLoginURL, cfg.AuthLogoutURL, cfg.CookieDomain)
+	gate := web.NewGate(auth, profiles, tokens)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           web.NewRouter(h, auth, resolver, cfg.ClientDir),
+		Handler:           web.NewRouter(h, gate, cfg.ClientDir),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
