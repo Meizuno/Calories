@@ -68,23 +68,23 @@ const g = (n: number) => Math.round(n * 10) / 10;
       <table class="w-full text-sm sm:text-base">
         <thead class="text-gray-500">
           <tr>
-            <th class="py-1 text-left font-normal">Název</th>
-            <th class="py-1 text-right font-normal">Základ</th>
-            <th class="py-1 text-right font-normal">kcal</th>
-            <th class="py-1 text-right font-normal">Sach.</th>
-            <th class="py-1 text-right font-normal">Bílk.</th>
-            <th class="py-1 text-right font-normal">Tuky</th>
+            <th class="py-1 text-left font-normal text-gray-500">Název</th>
+            <th class="py-1 text-right font-normal text-gray-500">Základ</th>
+            <th class="py-1 text-right font-medium text-gray-600 dark:text-gray-300">kcal</th>
+            <th class="py-1 text-right font-medium text-sky-600 dark:text-sky-400">Sach.</th>
+            <th class="py-1 text-right font-medium text-emerald-600 dark:text-emerald-400">Bílk.</th>
+            <th class="py-1 text-right font-medium text-amber-600 dark:text-amber-400">Tuky</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="x in foods" :key="x.id" class="border-t border-gray-100 dark:border-gray-800">
+          <tr v-for="x in foods" :key="x.id" class="border-t border-gray-100 hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-900/40">
             <td class="py-1.5">{{ x.name }}</td>
             <td class="py-1.5 text-right tabular-nums text-gray-500">{{ g(x.basisAmount) }} {{ x.basisUnit }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ k(x.kcal) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(x.carb) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(x.protein) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(x.fat) }}</td>
+            <td class="py-1.5 text-right font-medium tabular-nums">{{ k(x.kcal) }}</td>
+            <td class="py-1.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{{ g(x.carb) }}</td>
+            <td class="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ g(x.protein) }}</td>
+            <td class="py-1.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{{ g(x.fat) }}</td>
             <td class="py-1.5 text-right"><UButton size="xs" color="error" variant="ghost" label="✕" @click="del(x.id)" /></td>
           </tr>
           <tr v-if="!foods.length"><td colspan="7" class="py-3 text-center text-gray-400">Zatím prázdné</td></tr>

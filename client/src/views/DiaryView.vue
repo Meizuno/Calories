@@ -269,21 +269,15 @@ const g = (n: number) => Math.round(n * 10) / 10;
           </div>
           <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
         </div>
-        <p
-          v-else-if="item.meal.note"
-          class="mb-3 whitespace-pre-line rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-300"
-        >
-          {{ item.meal.note }}
-        </p>
         <table class="w-full text-sm sm:text-base">
-          <thead class="text-xs text-gray-500 sm:text-sm">
+          <thead class="text-xs sm:text-sm">
             <tr>
-              <th class="py-1 text-left font-normal">Položka</th>
-              <th class="py-1 text-right font-normal">Množství</th>
-              <th class="py-1 text-right font-normal">kcal</th>
-              <th class="py-1 text-right font-normal">Sach.</th>
-              <th class="py-1 text-right font-normal">Bílk.</th>
-              <th class="py-1 text-right font-normal">Tuky</th>
+              <th class="py-1 text-left font-normal text-gray-500">Položka</th>
+              <th class="py-1 text-right font-normal text-gray-500">Množství</th>
+              <th class="py-1 text-right font-medium text-gray-600 dark:text-gray-300">kcal</th>
+              <th class="py-1 text-right font-medium text-sky-600 dark:text-sky-400">Sach.</th>
+              <th class="py-1 text-right font-medium text-emerald-600 dark:text-emerald-400">Bílk.</th>
+              <th class="py-1 text-right font-medium text-amber-600 dark:text-amber-400">Tuky</th>
               <th></th>
             </tr>
           </thead>
@@ -306,13 +300,13 @@ const g = (n: number) => Math.round(n * 10) / 10;
                   <UButton size="xs" color="neutral" variant="ghost" label="✕" @click="cancelEdit" />
                 </td>
               </tr>
-              <tr v-else class="border-t border-gray-100 dark:border-gray-800">
+              <tr v-else class="border-t border-gray-100 hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-900/40">
                 <td class="py-1.5">{{ e.name }}</td>
                 <td class="py-1.5 whitespace-nowrap text-right tabular-nums text-gray-500">{{ g(e.quantity) }} {{ e.unit }}</td>
-                <td class="py-1.5 text-right tabular-nums">{{ k(e.kcal) }}</td>
-                <td class="py-1.5 text-right tabular-nums">{{ g(e.carb) }}</td>
-                <td class="py-1.5 text-right tabular-nums">{{ g(e.protein) }}</td>
-                <td class="py-1.5 text-right tabular-nums">{{ g(e.fat) }}</td>
+                <td class="py-1.5 text-right font-medium tabular-nums">{{ k(e.kcal) }}</td>
+                <td class="py-1.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{{ g(e.carb) }}</td>
+                <td class="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ g(e.protein) }}</td>
+                <td class="py-1.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{{ g(e.fat) }}</td>
                 <td class="py-1.5 text-right whitespace-nowrap">
                   <UButton size="xs" color="neutral" variant="ghost" label="✎" @click="startEditEntry(e)" />
                   <UButton size="xs" color="error" variant="ghost" label="✕" @click="delEntry(e.id)" />
@@ -326,13 +320,19 @@ const g = (n: number) => Math.round(n * 10) / 10;
               <td class="py-1.5">Celkem</td>
               <td></td>
               <td class="py-1.5 text-right tabular-nums">{{ k(item.meal.total.kcal) }}</td>
-              <td class="py-1.5 text-right tabular-nums">{{ g(item.meal.total.carb) }}</td>
-              <td class="py-1.5 text-right tabular-nums">{{ g(item.meal.total.protein) }}</td>
-              <td class="py-1.5 text-right tabular-nums">{{ g(item.meal.total.fat) }}</td>
+              <td class="py-1.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{{ g(item.meal.total.carb) }}</td>
+              <td class="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ g(item.meal.total.protein) }}</td>
+              <td class="py-1.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{{ g(item.meal.total.fat) }}</td>
               <td></td>
             </tr>
           </tfoot>
         </table>
+        <p
+          v-if="editingMeal !== item.meal.id && item.meal.note"
+          class="mt-3 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-xs italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-sm"
+        >
+          {{ item.meal.note }}
+        </p>
       </template>
     </UAccordion>
 
