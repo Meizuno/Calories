@@ -43,17 +43,10 @@ cd client && pnpm install && pnpm dev
 
 # optional: seed the dev user with sample foods + today's meals (local only)
 cd server && go run ./cmd/seed       # or: make seed
-
-# optional: import a markdown food diary (weeks/days/meals/food tables)
-cd server && go run ./cmd/import --dry-run notes.md   # parse + preview, no DB
-cd server && go run ./cmd/import notes.md             # write into DEV_USER_ID's profile
 ```
 
-`cmd/seed` and `cmd/import` are dev-only tools — the Docker image builds only
-`./cmd/server`, so they never ship in production. `import` is additive and skips
-days that already have meals (`--force` to add anyway); `--user <sso-id>` targets
-a specific profile. A blockquote line (`> …`) under a `### meal` heading is
-imported as that meal's comment (note).
+`cmd/seed` is a dev-only tool — the Docker image builds only `./cmd/server`, so
+it never ships in production.
 
 ## Client
 
