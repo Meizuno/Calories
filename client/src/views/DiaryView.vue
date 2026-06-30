@@ -129,7 +129,7 @@ const k = (n: number) => Math.round(n);
       type="multiple"
       v-model="open"
       :items="mealItems"
-      :ui="{ item: 'mb-2 rounded-lg border border-gray-200 px-3 dark:border-gray-800', content: 'pb-3' }"
+      :ui="{ item: 'mb-2 rounded-lg border border-gray-200 px-3 dark:border-gray-700' }"
     >
       <template #default="{ item }">
         <div class="flex grow items-center justify-between gap-3 pr-3">
@@ -154,28 +154,32 @@ const k = (n: number) => Math.round(n);
         </div>
       </template>
       <template #content="{ item }">
-        <div v-if="editingMeal === item.meal.id" class="mb-3 space-y-2">
-          <div class="flex items-center gap-2">
-            <UInput
-              v-model="mealDraft"
-              size="sm"
-              class="flex-1"
-              placeholder="Název jídla"
-              @keydown.enter.prevent="saveMeal(item.meal.id)"
-              @keydown.esc="cancelEdit"
-            />
-            <UButton size="xs" label="Uložit" @click="saveMeal(item.meal.id)" />
-            <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancelEdit" />
+        <!-- The #content slot bypasses Nuxt UI's `body` padding, so add our own
+             bottom padding to keep each item's border visible below the table. -->
+        <div class="pb-3">
+          <div v-if="editingMeal === item.meal.id" class="mb-3 space-y-2">
+            <div class="flex items-center gap-2">
+              <UInput
+                v-model="mealDraft"
+                size="sm"
+                class="flex-1"
+                placeholder="Název jídla"
+                @keydown.enter.prevent="saveMeal(item.meal.id)"
+                @keydown.esc="cancelEdit"
+              />
+              <UButton size="xs" label="Uložit" @click="saveMeal(item.meal.id)" />
+              <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancelEdit" />
+            </div>
+            <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
           </div>
-          <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
+          <MealTable
+            editable
+            :meal="item.meal"
+            :show-note="editingMeal !== item.meal.id"
+            @update-entry="onUpdateEntry"
+            @delete-entry="delEntry"
+          />
         </div>
-        <MealTable
-          editable
-          :meal="item.meal"
-          :show-note="editingMeal !== item.meal.id"
-          @update-entry="onUpdateEntry"
-          @delete-entry="delEntry"
-        />
       </template>
     </UAccordion>
 
