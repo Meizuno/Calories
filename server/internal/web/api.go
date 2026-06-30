@@ -318,7 +318,10 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := u.Query()
-	q.Set("redirect_url", absoluteURL(r, back))
+	// Always return to the app ROOT: the auth allowlist matches redirect_url by
+	// exact full URL, so a single entry (https://<host>/) covers every login —
+	// regardless of which page triggered it.
+	q.Set("redirect_url", absoluteURL(r, "/"))
 	u.RawQuery = q.Encode()
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
