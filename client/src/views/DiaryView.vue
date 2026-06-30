@@ -56,10 +56,11 @@ const noteDraft = ref("");
 
 async function reload() {
   day.value = await api.getDay(date.value);
-  loadDays();
   cancelEdit();
   expandAll();
 }
+// The set of days-with-data only changes when entries are added/removed, so load
+// it once and refresh after mutations — not on every date change.
 async function loadDays() {
   try {
     days.value = new Set(await api.getDays());
@@ -68,6 +69,7 @@ async function loadDays() {
   }
 }
 watch(date, reload, { immediate: true });
+loadDays();
 
 const mealItems = computed(() => (day.value?.meals ?? []).map((m) => ({ label: m.name, value: String(m.id), meal: m })));
 const allOpen = computed(() => (day.value?.meals.length ?? 0) > 0 && open.value.length === (day.value?.meals.length ?? 0));
