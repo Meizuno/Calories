@@ -33,31 +33,19 @@ function goto(d: string) {
 
 const day = ref<Day | null>(null);
 const open = ref<string[]>([]);
-const mealId = ref<number>();
-const entry = ref({ name: "", quantity: "", unit: "g", kcal: "0", carb: "0", protein: "0", fat: "0" });
-const newMeal = ref("");
 
 // inline-edit state
 const editingMeal = ref<number | null>(null);
 const mealDraft = ref("");
 const noteDraft = ref("");
 
-const units = [
-  { label: "g", value: "g" },
-  { label: "ml", value: "ml" },
-  { label: "ks", value: "ks" },
-  { label: "porce", value: "porce" },
-];
-
 async function reload() {
   day.value = await api.getDay(date.value);
-  mealId.value = day.value?.meals[0]?.id; // always a meal of the loaded day
   cancelEdit();
   expandAll();
 }
 watch(date, reload, { immediate: true });
 
-const mealSelectItems = computed(() => (day.value?.meals ?? []).map((m) => ({ label: m.name, value: m.id })));
 const mealItems = computed(() => (day.value?.meals ?? []).map((m) => ({ label: m.name, value: String(m.id), meal: m })));
 const allOpen = computed(() => (day.value?.meals.length ?? 0) > 0 && open.value.length === (day.value?.meals.length ?? 0));
 
@@ -72,34 +60,8 @@ function toggleAll() {
   else expandAll();
 }
 
-const numVal = (s: string) => Math.max(0, parseFloat(s) || 0);
-
-async function addEntry() {
-  const q = parseFloat(entry.value.quantity);
-  if (!mealId.value || !entry.value.name.trim() || !(q > 0)) return;
-  day.value = await api.addEntry({
-    date: date.value,
-    mealId: mealId.value,
-    name: entry.value.name.trim(),
-    quantity: q,
-    unit: entry.value.unit || "g",
-    kcal: numVal(entry.value.kcal),
-    carb: numVal(entry.value.carb),
-    protein: numVal(entry.value.protein),
-    fat: numVal(entry.value.fat),
-  });
-  entry.value = { name: "", quantity: "", unit: "g", kcal: "0", carb: "0", protein: "0", fat: "0" };
-}
 async function delEntry(id: number) {
   if (confirm("Smazat položku?")) day.value = await api.deleteEntry(date.value, id);
-}
-async function addMeal() {
-  const n = newMeal.value.trim();
-  if (!n) return;
-  day.value = await api.addMeal(date.value, n);
-  newMeal.value = "";
-  if (!mealId.value) mealId.value = day.value.meals[0]?.id;
-  expandAll();
 }
 async function delMeal(id: number) {
   if (confirm("Smazat jídlo i s položkami?")) day.value = await api.deleteMeal(date.value, id);
@@ -147,63 +109,27 @@ const k = (n: number) => Math.round(n);
 
     <DaySummary :day="day" />
 
-    <UCard v-if="day.meals.length">
-      <template #header><span class="font-medium">Přidat položku</span></template>
-      <form class="grid grid-cols-2 gap-3 sm:grid-cols-4" @submit.prevent="addEntry">
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Přidat do
-          <USelect v-model="mealId" :items="mealSelectItems" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Název
-          <UInput v-model="entry.name" placeholder="např. Banán" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Množství
-          <UInput v-model="entry.quantity" type="number" step="any" min="0" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Jednotka
-          <USelect v-model="entry.unit" :items="units" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          kcal
-          <UInput v-model="entry.kcal" type="number" step="any" min="0" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Sach.
-          <UInput v-model="entry.carb" type="number" step="any" min="0" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Bílk.
-          <UInput v-model="entry.protein" type="number" step="any" min="0" />
-        </label>
-        <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Tuky
-          <UInput v-model="entry.fat" type="number" step="any" min="0" />
-        </label>
-        <div class="col-span-2 flex justify-end sm:col-span-4">
-          <UButton type="submit" label="Přidat" />
-        </div>
-      </form>
-    </UCard>
-
     <div class="flex items-center justify-between">
       <h2 class="text-base font-medium sm:text-lg">Jídelníček</h2>
-      <UButton
-        size="xs"
-        color="neutral"
-        variant="soft"
-        :label="allOpen ? 'Sbalit vše' : 'Rozbalit vše'"
-        @click="toggleAll"
-      />
+      <div class="flex items-center gap-2">
+        <UButton
+          v-if="day.meals.length"
+          size="xs"
+          color="neutral"
+          variant="soft"
+          :label="allOpen ? 'Sbalit vše' : 'Rozbalit vše'"
+          @click="toggleAll"
+        />
+        <UButton size="xs" label="+ Přidat" :to="{ path: '/log', query: { date } }" />
+      </div>
     </div>
 
     <UAccordion
+      v-if="day.meals.length"
       type="multiple"
       v-model="open"
       :items="mealItems"
-      :ui="{ item: 'mb-2 rounded-lg border border-gray-200 px-3 dark:border-gray-800' }"
+      :ui="{ item: 'mb-2 rounded-lg border border-gray-200 px-3 dark:border-gray-800', content: 'pb-3' }"
     >
       <template #default="{ item }">
         <div class="flex grow items-center justify-between gap-3 pr-3">
@@ -253,10 +179,10 @@ const k = (n: number) => Math.round(n);
       </template>
     </UAccordion>
 
-    <form class="flex gap-2" @submit.prevent="addMeal">
-      <UInput v-model="newMeal" placeholder="Nové jídlo (Snídaně, Oběd…)" class="flex-1" />
-      <UButton type="submit" color="neutral" label="+ Jídlo" />
-    </form>
+    <div v-else class="rounded-lg border border-dashed border-gray-200 p-8 text-center dark:border-gray-800">
+      <p class="text-sm text-gray-500">Zatím žádná jídla.</p>
+      <UButton class="mt-3" size="sm" label="+ Přidat jídlo" :to="{ path: '/log', query: { date } }" />
+    </div>
   </div>
 
   <div v-else class="p-8 text-center text-gray-400">Načítání…</div>

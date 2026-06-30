@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "./views/HomeView.vue";
+import LogView from "./views/LogView.vue";
 import ProfileView from "./views/ProfileView.vue";
 import SharedProfileView from "./views/SharedProfileView.vue";
 import { session, loadSession, redirectToLogin } from "./lib/session";
@@ -9,6 +10,7 @@ const router = createRouter({
   routes: [
     // Home: the diary for authenticated users, the welcome screen for anonymous.
     { path: "/", component: HomeView },
+    { path: "/log", component: LogView },
     { path: "/profiles/me", component: ProfileView },
     { path: "/profile/:uuid", component: SharedProfileView, meta: { public: true } },
   ],
