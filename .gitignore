@@ -1,0 +1,5 @@
+.env
+*.exe
+client/node_modules/
+client/dist/
+server/bin/

@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Fluid base type: the whole rem scale (Tailwind text-*, spacing) grows with the
+   viewport, clamped so it stays readable on phones and never oversized on big screens. */
+:root {
+  font-size: clamp(12px, 11px + 0.3vw, 16px);
+}
