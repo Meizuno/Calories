@@ -12,6 +12,7 @@ type Config struct {
 	Port            string
 	DevUserID       string
 	AuthValidateURL string
+	AuthRefreshURL  string
 	AuthLoginURL    string
 	AuthLogoutURL   string
 	CookieDomain    string
@@ -38,6 +39,7 @@ func Load() Config {
 		Port:            env("PORT", "8080"),
 		DevUserID:       devUser,
 		AuthValidateURL: validate,
+		AuthRefreshURL:  os.Getenv("AUTH_REFRESH_URL"),
 		AuthLoginURL:    os.Getenv("AUTH_LOGIN_URL"),
 		AuthLogoutURL:   os.Getenv("AUTH_LOGOUT_URL"),
 		// Parent domain the auth cookies live on (e.g. .meizuno.com) so logout can

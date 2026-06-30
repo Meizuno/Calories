@@ -294,7 +294,7 @@ func profileDTO(p db.Profile) profileResp {
 // Session is public: it reports whether the caller has a session and, if so, their
 // profile. The SPA uses it to bootstrap (welcome vs app, onboarding, login link).
 func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
-	uid := h.auth.Resolve(r)
+	uid := h.auth.ResolveWithRefresh(w, r)
 	if uid == "" {
 		writeJSON(w, map[string]any{"authenticated": false})
 		return

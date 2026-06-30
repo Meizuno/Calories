@@ -161,12 +161,10 @@ const g = (n: number) => Math.round(n * 10) / 10;
   <div v-if="day" class="space-y-5">
     <div class="flex items-center justify-between">
       <UButton color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
-      <div class="text-center">
-        <div class="text-base font-semibold tabular-nums sm:text-lg">
-          {{ date }} <span class="text-gray-400">({{ weekday(date) }})</span>
-          <span v-if="isToday" class="ml-1 text-xs font-medium text-emerald-500">dnes</span>
-        </div>
-        <UButton v-if="!isToday" size="xs" variant="link" label="↩ na dnes" @click="goto(todayISO())" />
+      <div class="flex flex-wrap items-center justify-center gap-x-2">
+        <span class="text-base font-semibold tabular-nums sm:text-lg">{{ date }} <span class="text-gray-400">({{ weekday(date) }})</span></span>
+        <span v-if="isToday" class="text-xs font-medium text-emerald-500">dnes</span>
+        <UButton v-else size="xs" variant="link" label="↩ na dnes" @click="goto(todayISO())" />
       </div>
       <UButton color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
     </div>

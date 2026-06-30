@@ -37,7 +37,7 @@ func main() {
 	catalog := service.NewCatalog(st.Queries)
 	profiles := service.NewProfiles(st.Queries)
 
-	auth := web.NewAuth(cfg.AuthValidateURL, cfg.DevUserID)
+	auth := web.NewAuth(cfg.AuthValidateURL, cfg.AuthRefreshURL, cfg.DevUserID)
 	h := web.NewHandlers(diary, catalog, profiles, auth, cfg.AuthLoginURL, cfg.AuthLogoutURL, cfg.CookieDomain)
 	resolver := web.NewProfileResolver(profiles)
 	srv := &http.Server{

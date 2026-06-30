@@ -31,19 +31,20 @@ func ProfileID(ctx context.Context) int64 {
 // to a dev user id when no token is present or no validate URL is configured.
 type Auth struct {
 	validateURL string
+	refreshURL  string
 	devUser     string
 	client      *http.Client
 }
 
-func NewAuth(validateURL, devUser string) *Auth {
-	return &Auth{validateURL: validateURL, devUser: devUser, client: &http.Client{Timeout: 10 * time.Second}}
+func NewAuth(validateURL, refreshURL, devUser string) *Auth {
+	return &Auth{validateURL: validateURL, refreshURL: refreshURL, devUser: devUser, client: &http.Client{Timeout: 10 * time.Second}}
 }
 
 // Middleware gates protected routes: it 401s when there is no session (no valid
 // token and no dev fallback), so the SPA can redirect the browser to the login URL.
 func (a *Auth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uid := a.Resolve(r)
+		uid := a.ResolveWithRefresh(w, r)
 		if uid == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -70,6 +71,56 @@ func (a *Auth) Resolve(r *http.Request) string {
 		return a.devUser
 	}
 	return ""
+}
+
+// ResolveWithRefresh is Resolve plus a transparent token refresh: if the access
+// token is missing/expired but a valid refresh_token cookie is present, it calls
+// the auth service's /refresh, relays the rotated cookies to the browser, and
+// validates the new access token — so the session renews without a re-login.
+func (a *Auth) ResolveWithRefresh(w http.ResponseWriter, r *http.Request) string {
+	if uid := a.Resolve(r); uid != "" {
+		return uid
+	}
+	access, setCookies := a.refresh(r)
+	if access == "" {
+		return ""
+	}
+	for _, c := range setCookies {
+		w.Header().Add("Set-Cookie", c) // rotated access + refresh, on the shared domain
+	}
+	return a.validate(r.Context(), access)
+}
+
+// refresh POSTs the refresh_token cookie to the auth service and returns the new
+// access token plus the Set-Cookie headers to relay back to the browser.
+func (a *Auth) refresh(r *http.Request) (string, []string) {
+	if a.refreshURL == "" {
+		return "", nil
+	}
+	rc, err := r.Cookie("refresh_token")
+	if err != nil || rc.Value == "" {
+		return "", nil
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, a.refreshURL, nil)
+	if err != nil {
+		return "", nil
+	}
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: rc.Value})
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", nil
+	}
+	var out struct {
+		AccessToken string `json:"access_token"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&out) != nil {
+		return "", nil
+	}
+	return out.AccessToken, resp.Header.Values("Set-Cookie")
 }
 
 func bearer(r *http.Request) string {
