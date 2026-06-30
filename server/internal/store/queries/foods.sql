@@ -7,8 +7,8 @@ ORDER BY name;
 SELECT * FROM foods WHERE id = $1 AND profile_id = $2;
 
 -- name: CreateFood :one
-INSERT INTO foods (profile_id, name, note, basis_unit, basis_amount, kcal, carb, protein, fat)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO foods (profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: DeleteFood :exec

@@ -26,7 +26,6 @@ type Food struct {
 	ID          int64
 	ProfileID   int64
 	Name        string
-	Note        *string
 	BasisUnit   string
 	BasisAmount float64
 	Kcal        float64
@@ -60,23 +59,4 @@ type Profile struct {
 	Onboarded bool
 	CreatedAt time.Time
 	UpdatedAt time.Time
-}
-
-type Recipe struct {
-	ID          int64
-	ProfileID   int64
-	Name        string
-	Servings    float64
-	Composition *string
-	Archived    bool
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type RecipeItem struct {
-	ID       int64
-	RecipeID int64
-	FoodID   int64
-	Quantity float64
-	Unit     string
 }

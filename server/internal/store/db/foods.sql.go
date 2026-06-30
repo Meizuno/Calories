@@ -10,15 +10,14 @@ import (
 )
 
 const createFood = `-- name: CreateFood :one
-INSERT INTO foods (profile_id, name, note, basis_unit, basis_amount, kcal, carb, protein, fat)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, profile_id, name, note, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at
+INSERT INTO foods (profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at
 `
 
 type CreateFoodParams struct {
 	ProfileID   int64
 	Name        string
-	Note        *string
 	BasisUnit   string
 	BasisAmount float64
 	Kcal        float64
@@ -31,7 +30,6 @@ func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) (Food, e
 	row := q.db.QueryRow(ctx, createFood,
 		arg.ProfileID,
 		arg.Name,
-		arg.Note,
 		arg.BasisUnit,
 		arg.BasisAmount,
 		arg.Kcal,
@@ -44,7 +42,6 @@ func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) (Food, e
 		&i.ID,
 		&i.ProfileID,
 		&i.Name,
-		&i.Note,
 		&i.BasisUnit,
 		&i.BasisAmount,
 		&i.Kcal,
@@ -73,7 +70,7 @@ func (q *Queries) DeleteFood(ctx context.Context, arg DeleteFoodParams) error {
 }
 
 const getFood = `-- name: GetFood :one
-SELECT id, profile_id, name, note, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at FROM foods WHERE id = $1 AND profile_id = $2
+SELECT id, profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at FROM foods WHERE id = $1 AND profile_id = $2
 `
 
 type GetFoodParams struct {
@@ -88,7 +85,6 @@ func (q *Queries) GetFood(ctx context.Context, arg GetFoodParams) (Food, error) 
 		&i.ID,
 		&i.ProfileID,
 		&i.Name,
-		&i.Note,
 		&i.BasisUnit,
 		&i.BasisAmount,
 		&i.Kcal,
@@ -103,7 +99,7 @@ func (q *Queries) GetFood(ctx context.Context, arg GetFoodParams) (Food, error) 
 }
 
 const listFoods = `-- name: ListFoods :many
-SELECT id, profile_id, name, note, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at FROM foods
+SELECT id, profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat, archived, created_at, updated_at FROM foods
 WHERE profile_id = $1 AND archived = false
 ORDER BY name
 `
@@ -121,7 +117,6 @@ func (q *Queries) ListFoods(ctx context.Context, profileID int64) ([]Food, error
 			&i.ID,
 			&i.ProfileID,
 			&i.Name,
-			&i.Note,
 			&i.BasisUnit,
 			&i.BasisAmount,
 			&i.Kcal,
