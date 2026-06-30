@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import type { Meal, Entry } from "../lib/types";
 
 const props = defineProps<{ meal: Meal; editable?: boolean; showNote?: boolean }>();
@@ -57,100 +57,91 @@ const editing = (id: number) => props.editable && editingId.value === id;
 const showNote = () => props.showNote !== false;
 const k = (n: number) => Math.round(n);
 const g = (n: number) => Math.round(n * 10) / 10;
-const hasRows = computed(() => props.meal.entries.length > 0);
 
-// Identical column geometry (table-fixed + fixed widths) so every meal table
-// lines up the same; macro columns carry their own accent colour.
-const columns = computed(() => {
-  const foot = hasRows.value ? { footer: "" } : {};
-  const cols: Record<string, unknown>[] = [
-    { accessorKey: "name", header: "Položka", ...foot, meta: { class: { th: "text-left", td: "text-default whitespace-normal wrap-break-word" } } },
-    { accessorKey: "quantity", header: "Množství", ...foot, meta: { class: { th: "w-16 text-right sm:w-24", td: "text-right tabular-nums text-muted" } } },
-    { accessorKey: "kcal", header: "kcal", ...foot, meta: { class: { th: "w-12 text-right sm:w-16", td: "text-right font-medium tabular-nums text-highlighted" } } },
-    { accessorKey: "carb", header: "Sach.", ...foot, meta: { class: { th: "w-12 text-right text-sky-400 sm:w-14", td: "text-right tabular-nums text-sky-400" } } },
-    { accessorKey: "protein", header: "Bílk.", ...foot, meta: { class: { th: "w-12 text-right text-emerald-400 sm:w-14", td: "text-right tabular-nums text-emerald-400" } } },
-    { accessorKey: "fat", header: "Tuky", ...foot, meta: { class: { th: "w-12 text-right text-amber-400 sm:w-14", td: "text-right tabular-nums text-amber-400" } } },
-  ];
-  if (props.editable) {
-    cols.push({ id: "actions", header: "", ...foot, meta: { class: { th: "w-16 sm:w-20", td: "text-right" } } });
-  }
-  return cols;
-});
-
-const tableUi = {
-  base: "min-w-full table-fixed",
-  thead: "[&>tr]:after:hidden",
-  th: "px-2 py-1 text-xs font-medium sm:text-sm",
-  td: "px-2 py-1.5 align-top text-sm whitespace-normal sm:text-base",
-  tbody: "divide-y divide-gray-100 dark:divide-gray-800",
-  tfoot: "border-t border-gray-200 font-medium dark:border-gray-700",
-};
+// donut showing the entry's macro split (sky carbs / emerald protein / amber fat)
+function ringStyle(e: { carb: number; protein: number; fat: number }) {
+  const t = e.carb + e.protein + e.fat;
+  if (!t) return { background: "#3f4654" };
+  const c = (e.carb / t) * 100;
+  const cp = c + (e.protein / t) * 100;
+  return { background: `conic-gradient(#38bdf8 0 ${c}%, #34d399 ${c}% ${cp}%, #fbbf24 ${cp}% 100%)` };
+}
 </script>
 
 <template>
-  <div>
-    <UTable :data="meal.entries" :columns="columns" :ui="tableUi">
-      <template #empty><span class="text-gray-400">—</span></template>
+  <div class="space-y-2">
+    <p v-if="!meal.entries.length" class="py-3 text-center text-gray-400">—</p>
 
-      <!-- name -->
-      <template #name-cell="{ row }">
-        <UInput v-if="editing(row.original.id)" v-model="draft.name" size="xs" class="w-full" />
-        <template v-else>{{ row.original.name }}</template>
-      </template>
-      <template #name-footer>Celkem</template>
-
-      <!-- quantity + unit -->
-      <template #quantity-cell="{ row }">
-        <div v-if="editing(row.original.id)" class="flex gap-1">
-          <UInput v-model="draft.quantity" type="number" step="any" min="0" size="xs" class="min-w-0 flex-1" />
-          <USelect v-model="draft.unit" :items="units" size="xs" class="min-w-0 flex-1" />
+    <div
+      v-for="e in meal.entries"
+      :key="e.id"
+      class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-900"
+    >
+      <!-- edit form -->
+      <div v-if="editing(e.id)" class="space-y-2">
+        <UInput v-model="draft.name" size="sm" class="w-full" placeholder="Název" />
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <label class="text-xs text-gray-500">
+            Množství
+            <div class="mt-0.5 flex gap-1">
+              <UInput v-model="draft.quantity" type="number" step="any" min="0" size="sm" class="min-w-0 flex-1" />
+              <USelect v-model="draft.unit" :items="units" size="sm" class="w-20 min-w-0" />
+            </div>
+          </label>
+          <label class="text-xs text-gray-500">kcal<UInput v-model="draft.kcal" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-sky-400">Sach.<UInput v-model="draft.carb" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-emerald-400">Bílk.<UInput v-model="draft.protein" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-amber-400">Tuky<UInput v-model="draft.fat" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
         </div>
-        <template v-else>{{ g(row.original.quantity) }} {{ row.original.unit }}</template>
-      </template>
+        <div class="flex justify-end gap-2">
+          <UButton size="xs" label="Uložit" @click="save(e.id)" />
+          <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancel" />
+        </div>
+      </div>
 
-      <!-- macros -->
-      <template #kcal-cell="{ row }">
-        <UInput v-if="editing(row.original.id)" v-model="draft.kcal" type="number" step="any" min="0" size="xs" class="w-full" />
-        <template v-else>{{ k(row.original.kcal) }}</template>
-      </template>
-      <template #kcal-footer>{{ k(meal.total.kcal) }}</template>
-
-      <template #carb-cell="{ row }">
-        <UInput v-if="editing(row.original.id)" v-model="draft.carb" type="number" step="any" min="0" size="xs" class="w-full" />
-        <template v-else>{{ g(row.original.carb) }}</template>
-      </template>
-      <template #carb-footer>{{ g(meal.total.carb) }}</template>
-
-      <template #protein-cell="{ row }">
-        <UInput v-if="editing(row.original.id)" v-model="draft.protein" type="number" step="any" min="0" size="xs" class="w-full" />
-        <template v-else>{{ g(row.original.protein) }}</template>
-      </template>
-      <template #protein-footer>{{ g(meal.total.protein) }}</template>
-
-      <template #fat-cell="{ row }">
-        <UInput v-if="editing(row.original.id)" v-model="draft.fat" type="number" step="any" min="0" size="xs" class="w-full" />
-        <template v-else>{{ g(row.original.fat) }}</template>
-      </template>
-      <template #fat-footer>{{ g(meal.total.fat) }}</template>
-
-      <!-- actions -->
-      <template #actions-cell="{ row }">
-        <div class="flex justify-end">
-          <template v-if="editing(row.original.id)">
-            <UButton size="xs" color="primary" variant="ghost" label="✓" class="size-6 justify-center p-0 sm:size-7" @click="save(row.original.id)" />
-            <UButton size="xs" color="neutral" variant="ghost" label="✕" class="size-6 justify-center p-0 sm:size-7" @click="cancel" />
-          </template>
-          <template v-else>
-            <UButton size="xs" color="neutral" variant="ghost" label="✎" class="size-6 justify-center p-0 sm:size-7" @click="startEdit(row.original)" />
-            <UButton size="xs" color="error" variant="ghost" label="✕" class="size-6 justify-center p-0 sm:size-7" @click="emit('delete-entry', row.original.id)" />
-          </template>
+      <!-- display -->
+      <template v-else>
+        <div class="flex items-center gap-3">
+          <div class="relative size-9 shrink-0 rounded-full" :style="ringStyle(e)">
+            <div class="absolute inset-1.5 rounded-full bg-gray-50 dark:bg-gray-900" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-medium leading-tight wrap-break-word">{{ e.name }}</div>
+            <div class="text-xs text-gray-500">{{ g(e.quantity) }} {{ e.unit }}</div>
+          </div>
+          <div class="shrink-0 text-right leading-none">
+            <div class="text-base font-bold tabular-nums">{{ k(e.kcal) }}</div>
+            <div class="text-[11px] text-gray-500">kcal</div>
+          </div>
+        </div>
+        <div class="mt-2 flex items-center justify-between gap-2 border-t border-gray-200 pt-2 dark:border-gray-800">
+          <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums sm:text-base">
+            <span><span class="text-gray-500">Sach</span> <b class="text-sky-600 dark:text-sky-400">{{ g(e.carb) }} g</b></span>
+            <span><span class="text-gray-500">Bílk</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(e.protein) }} g</b></span>
+            <span><span class="text-gray-500">Tuky</span> <b class="text-amber-600 dark:text-amber-400">{{ g(e.fat) }} g</b></span>
+          </div>
+          <div v-if="editable" class="-mr-1 flex shrink-0">
+            <UButton size="xs" color="neutral" variant="ghost" label="✎" class="size-7 justify-center p-0" @click="startEdit(e)" />
+            <UButton size="xs" color="error" variant="ghost" label="✕" class="size-7 justify-center p-0" @click="emit('delete-entry', e.id)" />
+          </div>
         </div>
       </template>
-    </UTable>
+    </div>
+
+    <!-- meal total -->
+    <div v-if="meal.entries.length" class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-1.5">
+      <span class="font-semibold">Celkem</span>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums sm:text-base">
+        <span><span class="text-gray-500">Sach</span> <b class="text-sky-600 dark:text-sky-400">{{ g(meal.total.carb) }} g</b></span>
+        <span><span class="text-gray-500">Bílk</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(meal.total.protein) }} g</b></span>
+        <span><span class="text-gray-500">Tuky</span> <b class="text-amber-600 dark:text-amber-400">{{ g(meal.total.fat) }} g</b></span>
+      </div>
+      <span class="ml-auto"><b class="text-base tabular-nums">{{ k(meal.total.kcal) }}</b> <span class="text-[11px] text-gray-500">kcal</span></span>
+    </div>
 
     <p
       v-if="meal.note && showNote()"
-      class="mt-3 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-xs italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-sm"
+      class="mt-2 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-xs italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-sm"
     >
       {{ meal.note }}
     </p>
