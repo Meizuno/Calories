@@ -13,6 +13,7 @@ declare module 'vue' {
   export interface GlobalComponents {
     DaySummary: typeof import('./src/components/DaySummary.vue')['default']
     MacroBars: typeof import('./src/components/MacroBars.vue')['default']
+    MealTable: typeof import('./src/components/MealTable.vue')['default']
     RingChart: typeof import('./src/components/RingChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

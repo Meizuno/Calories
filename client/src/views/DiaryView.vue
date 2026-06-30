@@ -2,8 +2,9 @@
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { api } from "../lib/api";
-import type { Day, Entry } from "../lib/types";
+import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
+import MealTable from "../components/MealTable.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -40,8 +41,6 @@ const newMeal = ref("");
 const editingMeal = ref<number | null>(null);
 const mealDraft = ref("");
 const noteDraft = ref("");
-const editingEntry = ref<number | null>(null);
-const entryDraft = ref({ name: "", quantity: "", unit: "g", kcal: "0", carb: "0", protein: "0", fat: "0" });
 
 const units = [
   { label: "g", value: "g" },
@@ -109,10 +108,8 @@ async function delMeal(id: number) {
 // ── editing ──────────────────────────────────────────────────────────────────
 function cancelEdit() {
   editingMeal.value = null;
-  editingEntry.value = null;
 }
 function startEditMeal(m: { id: number; name: string; note: string }) {
-  editingEntry.value = null;
   editingMeal.value = m.id;
   mealDraft.value = m.name;
   noteDraft.value = m.note;
@@ -125,36 +122,15 @@ async function saveMeal(id: number) {
   day.value = await api.updateMeal(date.value, id, n, noteDraft.value.trim());
   editingMeal.value = null;
 }
-function startEditEntry(e: Entry) {
-  editingMeal.value = null;
-  editingEntry.value = e.id;
-  entryDraft.value = {
-    name: e.name,
-    quantity: String(e.quantity),
-    unit: e.unit,
-    kcal: String(e.kcal),
-    carb: String(e.carb),
-    protein: String(e.protein),
-    fat: String(e.fat),
-  };
-}
-async function saveEntry(id: number) {
-  const q = parseFloat(entryDraft.value.quantity);
-  if (!entryDraft.value.name.trim() || !(q > 0)) return;
-  day.value = await api.updateEntry(date.value, id, {
-    name: entryDraft.value.name.trim(),
-    quantity: q,
-    unit: entryDraft.value.unit || "g",
-    kcal: numVal(entryDraft.value.kcal),
-    carb: numVal(entryDraft.value.carb),
-    protein: numVal(entryDraft.value.protein),
-    fat: numVal(entryDraft.value.fat),
-  });
-  editingEntry.value = null;
+// Entry editing lives in <MealTable>; it emits the new values, we persist them.
+async function onUpdateEntry(
+  id: number,
+  body: { name: string; quantity: number; unit: string; kcal: number; carb: number; protein: number; fat: number },
+) {
+  day.value = await api.updateEntry(date.value, id, body);
 }
 
 const k = (n: number) => Math.round(n);
-const g = (n: number) => Math.round(n * 10) / 10;
 </script>
 
 <template>
@@ -267,70 +243,13 @@ const g = (n: number) => Math.round(n * 10) / 10;
           </div>
           <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
         </div>
-        <table class="w-full text-sm sm:text-base">
-          <thead class="text-xs sm:text-sm">
-            <tr>
-              <th class="py-1 text-left font-normal text-gray-500">Položka</th>
-              <th class="py-1 text-right font-normal text-gray-500">Množství</th>
-              <th class="py-1 text-right font-medium text-gray-600 dark:text-gray-300">kcal</th>
-              <th class="py-1 text-right font-medium text-sky-600 dark:text-sky-400">Sach.</th>
-              <th class="py-1 text-right font-medium text-emerald-600 dark:text-emerald-400">Bílk.</th>
-              <th class="py-1 text-right font-medium text-amber-600 dark:text-amber-400">Tuky</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="e in item.meal.entries" :key="e.id">
-              <tr v-if="editingEntry === e.id" class="border-t border-gray-100 dark:border-gray-800">
-                <td class="py-1.5 pr-2"><UInput v-model="entryDraft.name" size="xs" /></td>
-                <td class="py-1.5">
-                  <div class="flex justify-end gap-1">
-                    <UInput v-model="entryDraft.quantity" type="number" step="any" min="0" size="xs" class="w-16" />
-                    <USelect v-model="entryDraft.unit" :items="units" size="xs" class="w-20" />
-                  </div>
-                </td>
-                <td class="py-1.5 pl-2"><UInput v-model="entryDraft.kcal" type="number" step="any" min="0" size="xs" class="w-16" /></td>
-                <td class="py-1.5 pl-2"><UInput v-model="entryDraft.carb" type="number" step="any" min="0" size="xs" class="w-16" /></td>
-                <td class="py-1.5 pl-2"><UInput v-model="entryDraft.protein" type="number" step="any" min="0" size="xs" class="w-16" /></td>
-                <td class="py-1.5 pl-2"><UInput v-model="entryDraft.fat" type="number" step="any" min="0" size="xs" class="w-16" /></td>
-                <td class="py-1.5 text-right whitespace-nowrap">
-                  <UButton size="xs" color="primary" variant="ghost" label="✓" @click="saveEntry(e.id)" />
-                  <UButton size="xs" color="neutral" variant="ghost" label="✕" @click="cancelEdit" />
-                </td>
-              </tr>
-              <tr v-else class="border-t border-gray-100 hover:bg-gray-50/70 dark:border-gray-800 dark:hover:bg-gray-900/40">
-                <td class="py-1.5">{{ e.name }}</td>
-                <td class="py-1.5 whitespace-nowrap text-right tabular-nums text-gray-500">{{ g(e.quantity) }} {{ e.unit }}</td>
-                <td class="py-1.5 text-right font-medium tabular-nums">{{ k(e.kcal) }}</td>
-                <td class="py-1.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{{ g(e.carb) }}</td>
-                <td class="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ g(e.protein) }}</td>
-                <td class="py-1.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{{ g(e.fat) }}</td>
-                <td class="py-1.5 text-right whitespace-nowrap">
-                  <UButton size="xs" color="neutral" variant="ghost" label="✎" @click="startEditEntry(e)" />
-                  <UButton size="xs" color="error" variant="ghost" label="✕" @click="delEntry(e.id)" />
-                </td>
-              </tr>
-            </template>
-            <tr v-if="!item.meal.entries.length"><td colspan="7" class="py-3 text-center text-gray-400">—</td></tr>
-          </tbody>
-          <tfoot v-if="item.meal.entries.length">
-            <tr class="border-t border-gray-200 font-medium dark:border-gray-700">
-              <td class="py-1.5">Celkem</td>
-              <td></td>
-              <td class="py-1.5 text-right tabular-nums">{{ k(item.meal.total.kcal) }}</td>
-              <td class="py-1.5 text-right tabular-nums text-sky-600 dark:text-sky-400">{{ g(item.meal.total.carb) }}</td>
-              <td class="py-1.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{{ g(item.meal.total.protein) }}</td>
-              <td class="py-1.5 text-right tabular-nums text-amber-600 dark:text-amber-400">{{ g(item.meal.total.fat) }}</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-        <p
-          v-if="editingMeal !== item.meal.id && item.meal.note"
-          class="mt-3 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-xs italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-sm"
-        >
-          {{ item.meal.note }}
-        </p>
+        <MealTable
+          editable
+          :meal="item.meal"
+          :show-note="editingMeal !== item.meal.id"
+          @update-entry="onUpdateEntry"
+          @delete-entry="delEntry"
+        />
       </template>
     </UAccordion>
 

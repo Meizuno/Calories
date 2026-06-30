@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { api } from "../lib/api";
 import type { Day, Profile } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
+import MealTable from "../components/MealTable.vue";
 
 const route = useRoute();
 const uuid = computed(() => route.params.uuid as string);
@@ -43,7 +44,6 @@ async function load() {
 watch([uuid, date], load, { immediate: true });
 
 const k = (n: number) => Math.round(n);
-const g = (n: number) => Math.round(n * 10) / 10;
 </script>
 
 <template>
@@ -74,29 +74,7 @@ const g = (n: number) => Math.round(n * 10) / 10;
         <span>{{ m.name }}</span>
         <span class="tabular-nums text-sm font-normal text-gray-500">{{ k(m.total.kcal) }} kcal</span>
       </div>
-      <table class="mt-2 w-full text-sm sm:text-base">
-        <thead class="text-xs text-gray-500 sm:text-sm">
-          <tr>
-            <th class="py-1 text-left font-normal">Položka</th>
-            <th class="py-1 text-right font-normal">Množství</th>
-            <th class="py-1 text-right font-normal">kcal</th>
-            <th class="py-1 text-right font-normal">Sach.</th>
-            <th class="py-1 text-right font-normal">Bílk.</th>
-            <th class="py-1 text-right font-normal">Tuky</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="e in m.entries" :key="e.id" class="border-t border-gray-100 dark:border-gray-800">
-            <td class="py-1.5">{{ e.name }}</td>
-            <td class="py-1.5 whitespace-nowrap text-right tabular-nums text-gray-500">{{ g(e.quantity) }} {{ e.unit }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ k(e.kcal) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(e.carb) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(e.protein) }}</td>
-            <td class="py-1.5 text-right tabular-nums">{{ g(e.fat) }}</td>
-          </tr>
-          <tr v-if="!m.entries.length"><td colspan="6" class="py-3 text-center text-gray-400">—</td></tr>
-        </tbody>
-      </table>
+      <MealTable class="mt-2" :meal="m" />
     </div>
   </div>
 
