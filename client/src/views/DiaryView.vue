@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { type DateValue, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { api } from "../lib/api";
 import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
@@ -34,6 +35,20 @@ function goto(d: string) {
 const day = ref<Day | null>(null);
 const open = ref<string[]>([]);
 
+// Calendar: which days are navigable (have data), and popover state.
+const days = ref<Set<string>>(new Set());
+const calOpen = ref(false);
+const calValue = computed(() => parseDate(date.value));
+const maxDate = today(getLocalTimeZone()); // no future days
+function isUnavailable(d: DateValue) {
+  return !days.value.has(d.toString());
+}
+function pickDate(value: DateValue | undefined) {
+  if (!value) return;
+  calOpen.value = false;
+  goto(value.toString());
+}
+
 // inline-edit state
 const editingMeal = ref<number | null>(null);
 const mealDraft = ref("");
@@ -41,8 +56,16 @@ const noteDraft = ref("");
 
 async function reload() {
   day.value = await api.getDay(date.value);
+  loadDays();
   cancelEdit();
   expandAll();
+}
+async function loadDays() {
+  try {
+    days.value = new Set(await api.getDays());
+  } catch {
+    /* non-fatal — calendar just shows no enabled days */
+  }
 }
 watch(date, reload, { immediate: true });
 
@@ -61,10 +84,16 @@ function toggleAll() {
 }
 
 async function delEntry(id: number) {
-  if (confirm("Smazat položku?")) day.value = await api.deleteEntry(date.value, id);
+  if (confirm("Smazat položku?")) {
+    day.value = await api.deleteEntry(date.value, id);
+    loadDays();
+  }
 }
 async function delMeal(id: number) {
-  if (confirm("Smazat jídlo i s položkami?")) day.value = await api.deleteMeal(date.value, id);
+  if (confirm("Smazat jídlo i s položkami?")) {
+    day.value = await api.deleteMeal(date.value, id);
+    loadDays();
+  }
 }
 
 // ── editing ──────────────────────────────────────────────────────────────────
@@ -97,14 +126,30 @@ const k = (n: number) => Math.round(n);
 
 <template>
   <div v-if="day" class="space-y-5">
-    <div class="flex items-center justify-between">
-      <UButton color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
-      <div class="flex flex-wrap items-center justify-center gap-x-2">
-        <span class="text-base font-semibold tabular-nums sm:text-lg">{{ date }} <span class="text-gray-400">({{ weekday(date) }})</span></span>
-        <span v-if="isToday" class="text-xs font-medium text-emerald-500">dnes</span>
-        <UButton v-else size="xs" variant="link" label="↩ na dnes" @click="goto(todayISO())" />
+    <div class="flex items-center justify-between gap-2">
+      <!-- jump to today; disabled when today is already selected -->
+      <UButton size="sm" color="neutral" variant="soft" label="Dnes" :disabled="isToday" @click="goto(todayISO())" />
+
+      <!-- prev / next arrows hugging the date -->
+      <div class="flex items-center gap-1">
+        <UButton size="xs" color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
+        <span class="px-1 text-base font-semibold tabular-nums sm:text-lg">{{ date }} <span class="text-gray-400">({{ weekday(date) }})</span></span>
+        <UButton size="xs" color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
       </div>
-      <UButton color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
+
+      <!-- calendar; only days that have data are selectable -->
+      <UPopover v-model:open="calOpen">
+        <UButton size="sm" color="neutral" variant="soft" label="📅" aria-label="Otevřít kalendář" />
+        <template #content>
+          <UCalendar
+            :model-value="calValue"
+            :max-value="maxDate"
+            :is-date-unavailable="isUnavailable"
+            class="p-2"
+            @update:model-value="pickDate"
+          />
+        </template>
+      </UPopover>
     </div>
 
     <DaySummary :day="day" />
@@ -129,7 +174,7 @@ const k = (n: number) => Math.round(n);
       type="multiple"
       v-model="open"
       :items="mealItems"
-      :ui="{ item: 'mb-2 rounded-lg border border-gray-200 px-3 dark:border-gray-700' }"
+      :ui="{ item: 'mb-2 rounded-lg border last:border-b border-gray-200 px-3 dark:border-gray-700' }"
     >
       <template #default="{ item }">
         <div class="flex grow items-center justify-between gap-3 pr-3">

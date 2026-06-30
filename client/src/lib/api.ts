@@ -15,6 +15,9 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 export const api = {
   getDay: (date: string) => fetch(`/api/day?date=${date}`).then((r) => asJSON<Day>(r)),
 
+  // dates (YYYY-MM-DD) that have logged data — used to enable calendar days
+  getDays: () => fetch("/api/days").then((r) => asJSON<string[]>(r)),
+
   addMeal: (date: string, name: string) =>
     fetch("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }).then((r) => asJSON<Day>(r)),
 

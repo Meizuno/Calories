@@ -20,10 +20,13 @@ declare module 'vue' {
     UAccordion: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Accordion.vue')['default']
     UApp: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
     UButton: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
+    UCalendar: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Calendar.vue')['default']
     UCard: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Card.vue')['default']
     UInput: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
+    UPopover: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Popover.vue')['default']
     USelect: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
     USwitch: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+    UTable: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Table.vue')['default']
     UTextarea: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Textarea.vue')['default']
   }
 }

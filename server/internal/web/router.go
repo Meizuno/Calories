@@ -39,6 +39,7 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 
 			// Diary.
 			r.With(gate.Scope("read")).Get("/day", h.GetDay)
+			r.With(gate.Scope("read")).Get("/days", h.ListDays)
 			r.With(gate.Scope("add")).Post("/meals", h.AddMeal)
 			r.With(gate.Scope("")).Patch("/meals/{id}", h.UpdateMeal)
 			r.With(gate.Scope("")).Delete("/meals/{id}", h.DeleteMeal)

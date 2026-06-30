@@ -214,6 +214,21 @@ func (h *Handlers) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	h.respondDay(w, r, pid, parseDate(r.URL.Query().Get("date")))
 }
 
+// ListDays returns every date (YYYY-MM-DD) that has logged data, so the SPA can
+// enable only those days in the calendar.
+func (h *Handlers) ListDays(w http.ResponseWriter, r *http.Request) {
+	days, err := h.diary.ListDays(r.Context(), ProfileID(r.Context()))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]string, len(days))
+	for i, d := range days {
+		out[i] = d.Format("2006-01-02")
+	}
+	writeJSON(w, out)
+}
+
 func (h *Handlers) respondDay(w http.ResponseWriter, r *http.Request, profileID int64, date time.Time) {
 	dv, err := h.diary.GetDayView(r.Context(), profileID, date)
 	if err != nil {

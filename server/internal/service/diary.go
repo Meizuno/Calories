@@ -119,6 +119,12 @@ func (s *Diary) LogMeal(ctx context.Context, profileID int64, date time.Time, na
 	return meal.ID, nil
 }
 
+// ListDays returns the distinct dates that have at least one logged entry — used
+// by the client to mark which calendar days are navigable.
+func (s *Diary) ListDays(ctx context.Context, profileID int64) ([]time.Time, error) {
+	return s.q.ListMealDays(ctx, profileID)
+}
+
 func (s *Diary) DeleteMeal(ctx context.Context, profileID, mealID int64) error {
 	return s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID})
 }

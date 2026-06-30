@@ -79,6 +79,34 @@ func (q *Queries) GetMealForProfile(ctx context.Context, arg GetMealForProfilePa
 	return i, err
 }
 
+const listMealDays = `-- name: ListMealDays :many
+SELECT DISTINCT m.date
+FROM meals m
+JOIN entries e ON e.meal_id = m.id
+WHERE m.profile_id = $1
+ORDER BY m.date
+`
+
+func (q *Queries) ListMealDays(ctx context.Context, profileID int64) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, listMealDays, profileID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []time.Time
+	for rows.Next() {
+		var date time.Time
+		if err := rows.Scan(&date); err != nil {
+			return nil, err
+		}
+		items = append(items, date)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMealsForDay = `-- name: ListMealsForDay :many
 SELECT id, profile_id, date, name, position, note FROM meals WHERE profile_id = $1 AND date = $2 ORDER BY position, id
 `

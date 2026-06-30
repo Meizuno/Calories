@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@internationalized/date':
+        specifier: 3.12.2
+        version: 3.12.2
       '@nuxt/ui':
         specifier: ^3.0.0
         version: 3.3.7(@babel/parser@7.29.7)(embla-carousel@8.6.0)(typescript@5.9.3)(vite@5.4.21(lightningcss@1.32.0))(vue-router@4.6.4(vue@3.5.39(typescript@5.9.3)))(vue@3.5.39(typescript@5.9.3))

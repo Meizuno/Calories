@@ -5,7 +5,9 @@ import ui from "@nuxt/ui/vite";
 // Built output goes to ./dist (default). The client is fully separate from the
 // server; they are combined only in the Docker image. In dev, proxy /api → Go.
 export default defineConfig({
-  plugins: [vue(), ui()],
+  // colorMode: false → Nuxt UI stops managing the theme; we force dark via the
+  // `dark` class on <html> (see index.html).
+  plugins: [vue(), ui({ colorMode: false })],
   server: {
     proxy: {
       "/api": "http://localhost:8080",
