@@ -18,8 +18,8 @@ export const api = {
   addMeal: (date: string, name: string) =>
     fetch("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }).then((r) => asJSON<Day>(r)),
 
-  updateMeal: (date: string, id: number, name: string) =>
-    fetch(`/api/meals/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }).then((r) => asJSON<Day>(r)),
+  updateMeal: (date: string, id: number, name: string, note: string) =>
+    fetch(`/api/meals/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, name, note }) }).then((r) => asJSON<Day>(r)),
 
   deleteMeal: (date: string, id: number) =>
     fetch(`/api/meals/${id}?date=${date}`, { method: "DELETE" }).then((r) => asJSON<Day>(r)),

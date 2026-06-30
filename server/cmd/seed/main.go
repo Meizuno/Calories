@@ -112,7 +112,7 @@ func main() {
 	for d := 0; d < seedDays; d++ {
 		date := base.AddDate(0, 0, -d)
 		for _, n := range mealNames {
-			if err := diary.AddMeal(ctx, pid, date, n); err != nil {
+			if err := diary.AddMeal(ctx, pid, date, n, ""); err != nil {
 				log.Printf("meal %q (%s): %v", n, date.Format("2006-01-02"), err)
 			}
 		}

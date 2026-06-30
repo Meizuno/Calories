@@ -31,6 +31,7 @@ type pEntry struct {
 }
 type pMeal struct {
 	name    string
+	note    string // blockquote (>) lines under the meal heading
 	entries []pEntry
 }
 type pDay struct {
@@ -78,6 +79,9 @@ func main() {
 		fmt.Printf("\nsample — %s:\n", d.date.Format("2006-01-02"))
 		for _, m := range d.meals {
 			fmt.Printf("  %s\n", m.name)
+			if m.note != "" {
+				fmt.Printf("    > %s\n", strings.ReplaceAll(m.note, "\n", " / "))
+			}
 			for _, e := range m.entries {
 				fmt.Printf("    - %-46s %6.2f %-16s | %4.0f kcal  %3.0f/%3.0f/%3.0f\n",
 					e.name, e.qty, e.unit, e.kcal, e.carb, e.protein, e.fat)
@@ -141,7 +145,12 @@ func main() {
 				log.Printf("pos %s/%s: %v", d.date.Format("2006-01-02"), m.name, err)
 				continue
 			}
-			meal, err := st.Queries.CreateMeal(ctx, db.CreateMealParams{ProfileID: pid, Date: d.date, Name: m.name, Position: pos + 1})
+			var note *string
+			if m.note != "" {
+				n := m.note
+				note = &n
+			}
+			meal, err := st.Queries.CreateMeal(ctx, db.CreateMealParams{ProfileID: pid, Date: d.date, Name: m.name, Position: pos + 1, Note: note})
 			if err != nil {
 				log.Printf("meal %s/%s: %v", d.date.Format("2006-01-02"), m.name, err)
 				continue
@@ -162,7 +171,8 @@ func main() {
 
 // parse walks the markdown line by line. A `### heading` becomes a meal only when
 // a food table (header contains "Potravina") follows; the daily "Souhrn dne" table
-// (no "Potravina") is mined once for the "Cíl" goal row and otherwise ignored.
+// (no "Potravina") is mined once for the "Cíl" goal row and otherwise ignored. A
+// blockquote (`>`) line under a meal heading becomes that meal's comment/note.
 func parse(text string) ([]pDay, [4]float64, bool) {
 	lines := strings.Split(text, "\n")
 	var days []pDay
@@ -170,6 +180,8 @@ func parse(text string) ([]pDay, [4]float64, bool) {
 	haveGoal := false
 	ci := -1
 	curMeal := ""
+	curMealIdx := -1  // index in days[ci].meals of the meal being annotated
+	pendingNote := "" // > lines seen before the meal's table
 
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
@@ -182,14 +194,34 @@ func parse(text string) ([]pDay, [4]float64, bool) {
 			y, _ := strconv.Atoi(m[3])
 			days = append(days, pDay{date: time.Date(y, time.Month(mo), d, 0, 0, 0, 0, time.UTC)})
 			ci = len(days) - 1
-			curMeal = ""
+			curMeal, curMealIdx, pendingNote = "", -1, ""
 			continue
 		}
 		if strings.HasPrefix(line, "### ") {
 			curMeal = cleanHeading(strings.TrimPrefix(line, "###"))
+			curMealIdx, pendingNote = -1, ""
 			continue
 		}
 		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		// A blockquote line is a comment for the current meal (works before or after
+		// its food table).
+		if strings.HasPrefix(line, ">") {
+			t := strings.TrimSpace(strings.TrimPrefix(line, ">"))
+			if t != "" && ci >= 0 {
+				if curMealIdx >= 0 {
+					if days[ci].meals[curMealIdx].note != "" {
+						days[ci].meals[curMealIdx].note += "\n"
+					}
+					days[ci].meals[curMealIdx].note += t
+				} else {
+					if pendingNote != "" {
+						pendingNote += "\n"
+					}
+					pendingNote += t
+				}
+			}
 			continue
 		}
 		if strings.HasPrefix(line, "|") && strings.Contains(strings.ToLower(line), "kcal") {
@@ -213,7 +245,7 @@ func parse(text string) ([]pDay, [4]float64, bool) {
 				if ci < 0 || curMeal == "" {
 					continue
 				}
-				meal := pMeal{name: curMeal}
+				meal := pMeal{name: curMeal, note: pendingNote}
 				for _, c := range rows {
 					if len(c) < 6 {
 						continue
@@ -230,6 +262,8 @@ func parse(text string) ([]pDay, [4]float64, bool) {
 				}
 				if len(meal.entries) > 0 {
 					days[ci].meals = append(days[ci].meals, meal)
+					curMealIdx = len(days[ci].meals) - 1
+					pendingNote = ""
 				}
 			} else if !haveGoal {
 				for _, c := range rows {

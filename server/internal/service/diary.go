@@ -65,12 +65,12 @@ func (s *Diary) GetDayView(ctx context.Context, profileID int64, date time.Time)
 	}, nil
 }
 
-func (s *Diary) AddMeal(ctx context.Context, profileID int64, date time.Time, name string) error {
+func (s *Diary) AddMeal(ctx context.Context, profileID int64, date time.Time, name, note string) error {
 	pos, err := s.q.MaxMealPosition(ctx, db.MaxMealPositionParams{ProfileID: profileID, Date: date})
 	if err != nil {
 		return err
 	}
-	_, err = s.q.CreateMeal(ctx, db.CreateMealParams{ProfileID: profileID, Date: date, Name: name, Position: pos + 1})
+	_, err = s.q.CreateMeal(ctx, db.CreateMealParams{ProfileID: profileID, Date: date, Name: name, Position: pos + 1, Note: strPtr(note)})
 	return err
 }
 
@@ -78,8 +78,16 @@ func (s *Diary) DeleteMeal(ctx context.Context, profileID, mealID int64) error {
 	return s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID})
 }
 
-func (s *Diary) UpdateMeal(ctx context.Context, profileID, mealID int64, name string) error {
-	return s.q.UpdateMeal(ctx, db.UpdateMealParams{ID: mealID, ProfileID: profileID, Name: name})
+func (s *Diary) UpdateMeal(ctx context.Context, profileID, mealID int64, name, note string) error {
+	return s.q.UpdateMeal(ctx, db.UpdateMealParams{ID: mealID, ProfileID: profileID, Name: name, Note: strPtr(note)})
+}
+
+// strPtr maps an empty string to NULL (no note) and otherwise to a pointer.
+func strPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // AddFoodEntry scales the food by quantity and SNAPSHOTS the macros onto the

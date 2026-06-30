@@ -23,5 +23,6 @@ declare module 'vue' {
     UInput: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
     USelect: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
     USwitch: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']
+    UTextarea: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Textarea.vue')['default']
   }
 }

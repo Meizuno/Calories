@@ -52,7 +52,8 @@ cd server && go run ./cmd/import notes.md             # write into DEV_USER_ID's
 `cmd/seed` and `cmd/import` are dev-only tools — the Docker image builds only
 `./cmd/server`, so they never ship in production. `import` is additive and skips
 days that already have meals (`--force` to add anyway); `--user <sso-id>` targets
-a specific profile.
+a specific profile. A blockquote line (`> …`) under a `### meal` heading is
+imported as that meal's comment (note).
 
 ## Client
 

@@ -11,7 +11,7 @@ import (
 )
 
 const createMeal = `-- name: CreateMeal :one
-INSERT INTO meals (profile_id, date, name, position) VALUES ($1, $2, $3, $4) RETURNING id, profile_id, date, name, position, note
+INSERT INTO meals (profile_id, date, name, position, note) VALUES ($1, $2, $3, $4, $5) RETURNING id, profile_id, date, name, position, note
 `
 
 type CreateMealParams struct {
@@ -19,6 +19,7 @@ type CreateMealParams struct {
 	Date      time.Time
 	Name      string
 	Position  int32
+	Note      *string
 }
 
 func (q *Queries) CreateMeal(ctx context.Context, arg CreateMealParams) (Meal, error) {
@@ -27,6 +28,7 @@ func (q *Queries) CreateMeal(ctx context.Context, arg CreateMealParams) (Meal, e
 		arg.Date,
 		arg.Name,
 		arg.Position,
+		arg.Note,
 	)
 	var i Meal
 	err := row.Scan(
@@ -130,16 +132,22 @@ func (q *Queries) MaxMealPosition(ctx context.Context, arg MaxMealPositionParams
 }
 
 const updateMeal = `-- name: UpdateMeal :exec
-UPDATE meals SET name = $3 WHERE id = $1 AND profile_id = $2
+UPDATE meals SET name = $3, note = $4 WHERE id = $1 AND profile_id = $2
 `
 
 type UpdateMealParams struct {
 	ID        int64
 	ProfileID int64
 	Name      string
+	Note      *string
 }
 
 func (q *Queries) UpdateMeal(ctx context.Context, arg UpdateMealParams) error {
-	_, err := q.db.Exec(ctx, updateMeal, arg.ID, arg.ProfileID, arg.Name)
+	_, err := q.db.Exec(ctx, updateMeal,
+		arg.ID,
+		arg.ProfileID,
+		arg.Name,
+		arg.Note,
+	)
 	return err
 }

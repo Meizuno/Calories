@@ -39,6 +39,7 @@ const newMeal = ref("");
 // inline-edit state
 const editingMeal = ref<number | null>(null);
 const mealDraft = ref("");
+const noteDraft = ref("");
 const editingEntry = ref<number | null>(null);
 const entryDraft = ref({ name: "", quantity: "", unit: "g", kcal: "0", carb: "0", protein: "0", fat: "0" });
 
@@ -110,17 +111,18 @@ function cancelEdit() {
   editingMeal.value = null;
   editingEntry.value = null;
 }
-function startEditMeal(m: { id: number; name: string }) {
+function startEditMeal(m: { id: number; name: string; note: string }) {
   editingEntry.value = null;
   editingMeal.value = m.id;
   mealDraft.value = m.name;
+  noteDraft.value = m.note;
   const key = String(m.id);
   if (!open.value.includes(key)) open.value = [...open.value, key];
 }
 async function saveMeal(id: number) {
   const n = mealDraft.value.trim();
   if (!n) return;
-  day.value = await api.updateMeal(date.value, id, n);
+  day.value = await api.updateMeal(date.value, id, n, noteDraft.value.trim());
   editingMeal.value = null;
 }
 function startEditEntry(e: Entry) {
@@ -252,18 +254,27 @@ const g = (n: number) => Math.round(n * 10) / 10;
         </div>
       </template>
       <template #content="{ item }">
-        <div v-if="editingMeal === item.meal.id" class="mb-3 flex items-center gap-2">
-          <UInput
-            v-model="mealDraft"
-            size="sm"
-            class="flex-1"
-            placeholder="Název jídla"
-            @keydown.enter.prevent="saveMeal(item.meal.id)"
-            @keydown.esc="cancelEdit"
-          />
-          <UButton size="xs" label="Uložit" @click="saveMeal(item.meal.id)" />
-          <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancelEdit" />
+        <div v-if="editingMeal === item.meal.id" class="mb-3 space-y-2">
+          <div class="flex items-center gap-2">
+            <UInput
+              v-model="mealDraft"
+              size="sm"
+              class="flex-1"
+              placeholder="Název jídla"
+              @keydown.enter.prevent="saveMeal(item.meal.id)"
+              @keydown.esc="cancelEdit"
+            />
+            <UButton size="xs" label="Uložit" @click="saveMeal(item.meal.id)" />
+            <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancelEdit" />
+          </div>
+          <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
         </div>
+        <p
+          v-else-if="item.meal.note"
+          class="mb-3 whitespace-pre-line rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-300"
+        >
+          {{ item.meal.note }}
+        </p>
         <table class="w-full text-sm sm:text-base">
           <thead class="text-xs text-gray-500 sm:text-sm">
             <tr>

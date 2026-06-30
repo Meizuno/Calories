@@ -19,6 +19,7 @@ export interface Entry {
 export interface Meal {
   id: number;
   name: string;
+  note: string;
   entries: Entry[];
   total: Macros;
 }

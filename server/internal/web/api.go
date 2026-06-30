@@ -56,6 +56,7 @@ type entryResp struct {
 type mealResp struct {
 	ID      int64       `json:"id"`
 	Name    string      `json:"name"`
+	Note    string      `json:"note"`
 	Entries []entryResp `json:"entries"`
 	Total   macros      `json:"total"`
 }
@@ -81,6 +82,13 @@ type foodResp struct {
 
 func mac(m domain.Macros) macros { return macros{m.Kcal, m.Carb, m.Protein, m.Fat} }
 
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
 func dayDTO(dv service.DayView) dayResp {
 	meals := make([]mealResp, 0, len(dv.Meals))
 	for _, mv := range dv.Meals {
@@ -88,7 +96,7 @@ func dayDTO(dv service.DayView) dayResp {
 		for _, e := range mv.Entries {
 			entries = append(entries, entryResp{e.ID, e.Name, e.Quantity, e.Unit, e.Kcal, e.Carb, e.Protein, e.Fat})
 		}
-		meals = append(meals, mealResp{ID: mv.Meal.ID, Name: mv.Meal.Name, Entries: entries, Total: mac(mv.Total)})
+		meals = append(meals, mealResp{ID: mv.Meal.ID, Name: mv.Meal.Name, Note: deref(mv.Meal.Note), Entries: entries, Total: mac(mv.Total)})
 	}
 	return dayResp{
 		Date:      dv.Date.Format("2006-01-02"),
@@ -109,13 +117,14 @@ func (h *Handlers) AddMeal(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Date string `json:"date"`
 		Name string `json:"name"`
+		Note string `json:"note"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 	pid, date := ProfileID(r.Context()), parseDate(req.Date)
 	if req.Name != "" {
-		_ = h.diary.AddMeal(r.Context(), pid, date, req.Name)
+		_ = h.diary.AddMeal(r.Context(), pid, date, req.Name, strings.TrimSpace(req.Note))
 	}
 	h.respondDay(w, r, pid, date)
 }
@@ -124,13 +133,14 @@ func (h *Handlers) UpdateMeal(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Date string `json:"date"`
 		Name string `json:"name"`
+		Note string `json:"note"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 	pid := ProfileID(r.Context())
 	if name := strings.TrimSpace(req.Name); name != "" {
-		_ = h.diary.UpdateMeal(r.Context(), pid, idParam(r), name)
+		_ = h.diary.UpdateMeal(r.Context(), pid, idParam(r), name, strings.TrimSpace(req.Note))
 	}
 	h.respondDay(w, r, pid, parseDate(req.Date))
 }
