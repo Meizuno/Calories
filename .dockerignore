@@ -4,3 +4,5 @@ client/dist
 server/bin
 *.exe
 .env
+
+preview/

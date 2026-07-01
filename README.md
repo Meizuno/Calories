@@ -1,5 +1,10 @@
 # Calories — kalorie tracker
 
+<p align="center">
+  <img src="preview/demo.gif" alt="Calories demo — macro diary" width="760"><br>
+  <sub>▶ <a href="preview/demo.mp4">full-resolution MP4</a></sub>
+</p>
+
 Calorie/macro diary. **Clear client/server split** at the repo root; they are
 independent projects, combined only at build time.
 
