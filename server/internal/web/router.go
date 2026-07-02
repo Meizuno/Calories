@@ -11,6 +11,14 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger, middleware.Recoverer)
 
+	// Liveness/readiness probe — unauthenticated, no DB touch. Backs the Docker
+	// HEALTHCHECK (the binary self-probes this via `-healthcheck`) so `docker
+	// rollout` waits for a healthy new container before removing the old one.
+	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
+
 	// JSON API — same origin as the SPA, so the access_token cookie is sent
 	// automatically.
 	r.Route("/api", func(r chi.Router) {

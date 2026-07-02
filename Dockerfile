@@ -23,4 +23,8 @@ COPY --from=server /out/calories /calories
 COPY --from=client /client/dist /app/dist
 ENV CLIENT_DIR=/app/dist PORT=8080
 EXPOSE 8080
+# distroless has no shell/curl — the binary self-probes /health. `docker rollout`
+# waits for this to go healthy before removing the old container (zero-downtime).
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["/calories", "-healthcheck"]
 ENTRYPOINT ["/calories"]

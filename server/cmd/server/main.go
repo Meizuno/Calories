@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -18,6 +19,17 @@ import (
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+
+	// `calories -healthcheck` probes the running server's /health and exits 0/1.
+	// The distroless image has no shell or curl, so the Docker HEALTHCHECK invokes
+	// the binary itself. Handled before config.Load so the probe needs no DB/env
+	// beyond PORT.
+	healthcheck := flag.Bool("healthcheck", false, "probe the local server's /health and exit")
+	flag.Parse()
+	if *healthcheck {
+		os.Exit(runHealthcheck())
+	}
+
 	cfg := config.Load()
 
 	if err := store.Migrate(cfg.DatabaseURL); err != nil {
@@ -66,4 +78,25 @@ func main() {
 func fatal(msg string, err error) {
 	slog.Error(msg, "error", err)
 	os.Exit(1)
+}
+
+// runHealthcheck does a short-timeout GET to the local /health and returns a
+// process exit code (0 = healthy). Used by the Docker HEALTHCHECK.
+func runHealthcheck() int {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + port + "/health")
+	if err != nil {
+		slog.Error("healthcheck", "error", err)
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return 0
+	}
+	slog.Error("healthcheck", "status", resp.StatusCode)
+	return 1
 }
