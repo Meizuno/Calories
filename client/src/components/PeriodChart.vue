@@ -16,9 +16,9 @@ export interface DayBars {
 const props = defineProps<{ points: DayBars[] }>();
 
 const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
-  { key: "kcal", label: "Kalorie", color: "#10b981", unit: "kcal" },
+  { key: "kcal", label: "Kalorie", color: "#8b5cf6", unit: "kcal" },
   { key: "carb", label: "Sacharidy", color: "#0ea5e9", unit: "g" },
-  { key: "protein", label: "Bílkoviny", color: "#8b5cf6", unit: "g" },
+  { key: "protein", label: "Bílkoviny", color: "#10b981", unit: "g" },
   { key: "fat", label: "Tuky", color: "#f59e0b", unit: "g" },
 ];
 

@@ -207,9 +207,9 @@ const summary = computed(() => {
 
 const fmt = (v: number, m: Metric) => (m === "kcal" ? Math.round(v) : Math.round(v * 10) / 10);
 const SUMMARY = [
-  { key: "kcal" as Metric, label: "Kalorie", unit: "kcal", color: "#10b981" },
+  { key: "kcal" as Metric, label: "Kalorie", unit: "kcal", color: "#8b5cf6" },
   { key: "carb" as Metric, label: "Sacharidy", unit: "g", color: "#0ea5e9" },
-  { key: "protein" as Metric, label: "Bílkoviny", unit: "g", color: "#8b5cf6" },
+  { key: "protein" as Metric, label: "Bílkoviny", unit: "g", color: "#10b981" },
   { key: "fat" as Metric, label: "Tuky", unit: "g", color: "#f59e0b" },
 ];
 const avgLabel = computed(() => (gran.value === "week" ? "Ø / den" : "Ø / den (v týdnu)"));
