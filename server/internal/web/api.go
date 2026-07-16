@@ -229,6 +229,56 @@ func (h *Handlers) ListDays(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
+type dayTotalResp struct {
+	Date    string  `json:"date"`
+	Kcal    float64 `json:"kcal"`
+	Carb    float64 `json:"carb"`
+	Protein float64 `json:"protein"`
+	Fat     float64 `json:"fat"`
+}
+
+type statsResp struct {
+	From string         `json:"from"`
+	To   string         `json:"to"`
+	Goal macros         `json:"goal"`
+	Days []dayTotalResp `json:"days"`
+}
+
+// GetStats returns per-day macro totals for ?from=&to= (YYYY-MM-DD, inclusive),
+// plus the profile's daily goal. Reversed bounds are swapped and the window is
+// capped at one year so a hand-crafted range can't ask for an unbounded scan.
+func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, to := parseDate(q.Get("from")), parseDate(q.Get("to"))
+	if from.After(to) {
+		from, to = to, from
+	}
+	if earliest := to.AddDate(-1, 0, 0); from.Before(earliest) {
+		from = earliest
+	}
+	sv, err := h.diary.GetStats(r.Context(), ProfileID(r.Context()), from, to)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	days := make([]dayTotalResp, 0, len(sv.Days))
+	for _, d := range sv.Days {
+		days = append(days, dayTotalResp{
+			Date:    d.Date.Format("2006-01-02"),
+			Kcal:    d.Totals.Kcal,
+			Carb:    d.Totals.Carb,
+			Protein: d.Totals.Protein,
+			Fat:     d.Totals.Fat,
+		})
+	}
+	writeJSON(w, statsResp{
+		From: sv.From.Format("2006-01-02"),
+		To:   sv.To.Format("2006-01-02"),
+		Goal: mac(sv.Goal),
+		Days: days,
+	})
+}
+
 func (h *Handlers) respondDay(w http.ResponseWriter, r *http.Request, profileID int64, date time.Time) {
 	dv, err := h.diary.GetDayView(r.Context(), profileID, date)
 	if err != nil {

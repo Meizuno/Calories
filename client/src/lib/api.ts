@@ -1,4 +1,4 @@
-import type { Day, Profile } from "./types";
+import type { Day, Profile, Stats } from "./types";
 import { redirectToLogin } from "./session";
 
 async function asJSON<T>(res: Response): Promise<T> {
@@ -17,6 +17,10 @@ export const api = {
 
   // dates (YYYY-MM-DD) that have logged data — used to enable calendar days
   getDays: () => fetch("/api/days").then((r) => asJSON<string[]>(r)),
+
+  // per-day macro totals for an inclusive [from, to] range (YYYY-MM-DD)
+  getStats: (from: string, to: string) =>
+    fetch(`/api/stats?from=${from}&to=${to}`).then((r) => asJSON<Stats>(r)),
 
   addMeal: (date: string, name: string) =>
     fetch("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }).then((r) => asJSON<Day>(r)),

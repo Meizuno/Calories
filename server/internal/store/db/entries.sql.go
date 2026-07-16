@@ -59,6 +59,65 @@ func (q *Queries) CreateEntry(ctx context.Context, arg CreateEntryParams) (Entry
 	return i, err
 }
 
+const dailyTotals = `-- name: DailyTotals :many
+SELECT
+    m.date::date                        AS date,
+    COALESCE(SUM(e.kcal), 0)::float8    AS kcal,
+    COALESCE(SUM(e.carb), 0)::float8    AS carb,
+    COALESCE(SUM(e.protein), 0)::float8 AS protein,
+    COALESCE(SUM(e.fat), 0)::float8     AS fat
+FROM meals m
+JOIN entries e ON e.meal_id = m.id
+WHERE m.profile_id = $1
+  AND m.date >= $2
+  AND m.date <= $3
+GROUP BY m.date
+ORDER BY m.date
+`
+
+type DailyTotalsParams struct {
+	ProfileID int64
+	FromDate  time.Time
+	ToDate    time.Time
+}
+
+type DailyTotalsRow struct {
+	Date    time.Time
+	Kcal    float64
+	Carb    float64
+	Protein float64
+	Fat     float64
+}
+
+// Per-day macro sums for a profile within an inclusive date range. Only days
+// that have at least one entry are returned; the client fills the gaps so the
+// chart has a continuous day-by-day axis.
+func (q *Queries) DailyTotals(ctx context.Context, arg DailyTotalsParams) ([]DailyTotalsRow, error) {
+	rows, err := q.db.Query(ctx, dailyTotals, arg.ProfileID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DailyTotalsRow
+	for rows.Next() {
+		var i DailyTotalsRow
+		if err := rows.Scan(
+			&i.Date,
+			&i.Kcal,
+			&i.Carb,
+			&i.Protein,
+			&i.Fat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteEntry = `-- name: DeleteEntry :exec
 DELETE FROM entries AS e USING meals AS m
 WHERE e.id = $1 AND e.meal_id = m.id AND m.profile_id = $2

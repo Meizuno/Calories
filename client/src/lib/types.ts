@@ -39,3 +39,17 @@ export interface Profile {
   onboarded: boolean;
   goal: Macros;
 }
+
+// One day's summed macros inside a stats range. `date` is YYYY-MM-DD.
+export interface DayTotal extends Macros {
+  date: string;
+}
+
+// Per-day totals for a period plus the daily goal, from GET /api/stats.
+// Only days with logged entries are present; the view fills the gaps.
+export interface Stats {
+  from: string;
+  to: string;
+  goal: Macros;
+  days: DayTotal[];
+}

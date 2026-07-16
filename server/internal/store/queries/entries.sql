@@ -7,6 +7,24 @@ ORDER BY e.meal_id, e.position, e.id;
 -- name: MaxEntryPosition :one
 SELECT COALESCE(MAX(position), -1)::int AS pos FROM entries WHERE meal_id = $1;
 
+-- name: DailyTotals :many
+-- Per-day macro sums for a profile within an inclusive date range. Only days
+-- that have at least one entry are returned; the client fills the gaps so the
+-- chart has a continuous day-by-day axis.
+SELECT
+    m.date::date                        AS date,
+    COALESCE(SUM(e.kcal), 0)::float8    AS kcal,
+    COALESCE(SUM(e.carb), 0)::float8    AS carb,
+    COALESCE(SUM(e.protein), 0)::float8 AS protein,
+    COALESCE(SUM(e.fat), 0)::float8     AS fat
+FROM meals m
+JOIN entries e ON e.meal_id = m.id
+WHERE m.profile_id = sqlc.arg(profile_id)
+  AND m.date >= sqlc.arg(from_date)
+  AND m.date <= sqlc.arg(to_date)
+GROUP BY m.date
+ORDER BY m.date;
+
 -- name: CreateEntry :one
 INSERT INTO entries (meal_id, food_id, name, quantity, unit, position, kcal, carb, protein, fat)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)

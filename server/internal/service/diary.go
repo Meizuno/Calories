@@ -125,6 +125,39 @@ func (s *Diary) ListDays(ctx context.Context, profileID int64) ([]time.Time, err
 	return s.q.ListMealDays(ctx, profileID)
 }
 
+// DayTotal is one day's summed macros inside a stats range.
+type DayTotal struct {
+	Date   time.Time
+	Totals domain.Macros
+}
+
+// StatsView is the calorie/macro-per-day breakdown for a [From, To] window,
+// alongside the profile's current daily goal for reference lines.
+type StatsView struct {
+	From time.Time
+	To   time.Time
+	Goal domain.Macros
+	Days []DayTotal
+}
+
+// GetStats sums each day's entries within the inclusive [from, to] range. Only
+// days with logged entries are returned; the client fills the gaps so the chart
+// has a continuous axis.
+func (s *Diary) GetStats(ctx context.Context, profileID int64, from, to time.Time) (StatsView, error) {
+	rows, err := s.q.DailyTotals(ctx, db.DailyTotalsParams{ProfileID: profileID, FromDate: from, ToDate: to})
+	if err != nil {
+		return StatsView{}, err
+	}
+	days := make([]DayTotal, 0, len(rows))
+	for _, r := range rows {
+		days = append(days, DayTotal{
+			Date:   r.Date,
+			Totals: domain.Macros{Kcal: r.Kcal, Carb: r.Carb, Protein: r.Protein, Fat: r.Fat},
+		})
+	}
+	return StatsView{From: from, To: to, Goal: s.goal(ctx, profileID), Days: days}, nil
+}
+
 func (s *Diary) DeleteMeal(ctx context.Context, profileID, mealID int64) error {
 	return s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID})
 }

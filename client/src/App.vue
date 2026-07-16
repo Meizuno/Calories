@@ -26,6 +26,14 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
 
         <nav v-if="session.authenticated" class="flex items-center gap-1">
           <RouterLink
+            to="/stats"
+            class="rounded-lg px-2.5 py-1.5 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            active-class="bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+          >
+            Statistika
+          </RouterLink>
+
+          <RouterLink
             to="/profiles/me"
             class="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition hover:bg-gray-100 dark:hover:bg-gray-800"
             active-class="bg-gray-100 dark:bg-gray-800"
