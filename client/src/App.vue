@@ -2,9 +2,15 @@
 import { computed } from "vue";
 import { RouterLink, RouterView } from "vue-router";
 import { session, login, logout } from "./lib/session";
+import { usePullToRefresh } from "./composables/usePullToRefresh";
 
 const profileName = computed(() => session.profile?.name?.trim() || "");
 const initial = computed(() => (profileName.value ? profileName.value.charAt(0).toUpperCase() : "🙂"));
+
+// Pull down from the top of the page to reload — a full "refresh everything"
+// on mobile (the app re-fetches from the API on boot). Default onTrigger is
+// window.location.reload().
+const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePullToRefresh();
 </script>
 
 <template>
@@ -47,6 +53,32 @@ const initial = computed(() => (profileName.value ? profileName.value.charAt(0).
         </button>
       </div>
     </header>
+
+    <div
+      class="flex items-center justify-center overflow-hidden"
+      :class="{ 'transition-[height] duration-200 ease-out': !isPulling }"
+      :style="{ height: pullDistance + 'px' }"
+    >
+      <div
+        class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400"
+        :class="{ 'text-emerald-500 dark:text-emerald-400': pullReady }"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          class="size-4 transition-transform duration-200"
+          :class="{ 'rotate-180': pullReady }"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 5v14M5 12l7 7 7-7" />
+        </svg>
+        <span>{{ pullReady ? "Uvolněte pro obnovení" : "Táhněte pro obnovení" }}</span>
+      </div>
+    </div>
 
     <main class="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
       <RouterView />
