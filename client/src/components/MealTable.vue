@@ -141,7 +141,7 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
 
     <p
       v-if="meal.note && showNote()"
-      class="mt-2 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-xs italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-sm"
+      class="mt-2 whitespace-pre-line rounded-md border-l-2 border-amber-300 bg-amber-50/60 px-3 py-2 text-sm italic text-gray-600 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-gray-300 sm:text-base"
     >
       {{ meal.note }}
     </p>
