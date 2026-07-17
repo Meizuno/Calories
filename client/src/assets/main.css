@@ -7,3 +7,10 @@
 :root {
   font-size: clamp(13.5px, 12px + 0.55vw, 16px);
 }
+
+/* No native rubber-band overscroll on iOS Safari: short pages (e.g. the welcome
+   screen) shouldn't feel scrollable when their content fits, and the app has its
+   own JS pull-to-refresh, so the native bounce is only noise here. */
+html {
+  overscroll-behavior: none;
+}
