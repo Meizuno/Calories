@@ -14,6 +14,9 @@ const profile = ref<Profile | null>(null);
 const day = ref<Day | null>(null);
 const error = ref(false);
 
+// Which view is showing: the per-day meal tables or the period statistics.
+const tab = ref<"diary" | "stats">("diary");
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const todayISO = () => {
   const d = new Date();
@@ -50,45 +53,54 @@ const k = (n: number) => Math.round(n);
 <template>
   <div v-if="error" class="p-8 text-center text-gray-400">Profil nenalezen nebo není sdílený.</div>
 
-  <div v-else-if="profile && day" class="space-y-5">
+  <div v-else-if="profile" class="space-y-5">
     <h1 class="text-xl font-semibold sm:text-2xl">
       {{ profile.name || "Sdílený profil" }}
       <span class="text-sm font-normal text-gray-400">(jen ke čtení)</span>
     </h1>
 
-    <div class="flex items-center justify-between">
-      <UButton color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
-      <div class="text-base font-semibold tabular-nums sm:text-lg">
-        {{ date }} <span class="text-gray-400">({{ weekday(date) }})</span>
-      </div>
-      <UButton color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
+    <!-- switch between the per-day tables and the period statistics -->
+    <div class="flex gap-1.5">
+      <UButton size="sm" :color="tab === 'diary' ? 'primary' : 'neutral'" :variant="tab === 'diary' ? 'solid' : 'soft'" label="Deník" @click="tab = 'diary'" />
+      <UButton size="sm" :color="tab === 'stats' ? 'primary' : 'neutral'" :variant="tab === 'stats' ? 'solid' : 'soft'" label="Statistika" @click="tab = 'stats'" />
     </div>
 
-    <DaySummary :day="day" />
+    <!-- Diary: per-day meal tables with day navigation -->
+    <template v-if="tab === 'diary'">
+      <div v-if="day" class="space-y-5">
+        <div class="flex items-center justify-between">
+          <UButton color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
+          <div class="text-base font-semibold tabular-nums sm:text-lg">
+            {{ date }} <span class="text-gray-400">({{ weekday(date) }})</span>
+          </div>
+          <UButton color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
+        </div>
 
-    <div
-      v-for="m in day.meals"
-      :key="m.id"
-      class="rounded-lg border border-gray-200 p-3 dark:border-gray-800"
-    >
-      <div class="flex items-center justify-between font-medium">
-        <span>{{ m.name }}</span>
-        <span class="tabular-nums text-sm font-normal text-gray-500">{{ k(m.total.kcal) }} kcal</span>
+        <DaySummary :day="day" />
+
+        <div
+          v-for="m in day.meals"
+          :key="m.id"
+          class="rounded-lg border border-gray-200 p-3 dark:border-gray-800"
+        >
+          <div class="flex items-center justify-between font-medium">
+            <span>{{ m.name }}</span>
+            <span class="tabular-nums text-sm font-normal text-gray-500">{{ k(m.total.kcal) }} kcal</span>
+          </div>
+          <MealTable class="mt-2" :meal="m" />
+        </div>
       </div>
-      <MealTable class="mt-2" :meal="m" />
-    </div>
+      <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+    </template>
 
-    <!-- Read-only stats for the shared profile. Keyed by uuid so switching to a
-         different shared profile remounts (and refetches) the panel. -->
+    <!-- Statistics: same week/month stepping as the private profile. Keyed by
+         uuid so switching to a different shared profile remounts the panel. -->
     <StatsPanel
+      v-else
       :key="uuid"
       :fetch-stats="(from, to) => api.getSharedStats(uuid, from, to)"
       :fetch-days="() => api.getSharedDays(uuid)"
-    >
-      <template #title>
-        <h2 class="text-base font-semibold sm:text-lg">Statistika</h2>
-      </template>
-    </StatsPanel>
+    />
   </div>
 
   <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
