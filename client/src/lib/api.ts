@@ -60,4 +60,7 @@ export const api = {
   // public, read-only (shared profiles)
   getShared: (uuid: string) => fetch(`/api/shared/${uuid}`).then((r) => asJSON<Profile>(r)),
   getSharedDay: (uuid: string, date: string) => fetch(`/api/shared/${uuid}/day?date=${date}`).then((r) => asJSON<Day>(r)),
+  getSharedStats: (uuid: string, from: string, to: string) =>
+    fetch(`/api/shared/${uuid}/stats?from=${from}&to=${to}`).then((r) => asJSON<Stats>(r)),
+  getSharedDays: (uuid: string) => fetch(`/api/shared/${uuid}/days`).then((r) => asJSON<string[]>(r)),
 };

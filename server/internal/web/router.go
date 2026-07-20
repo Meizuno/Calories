@@ -30,6 +30,8 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 		r.Post("/logout", h.Logout)
 		r.Get("/shared/{uuid}", h.SharedProfile)
 		r.Get("/shared/{uuid}/day", h.SharedDay)
+		r.Get("/shared/{uuid}/stats", h.SharedStats)
+		r.Get("/shared/{uuid}/days", h.SharedDays)
 
 		// Protected. The Gate resolves either a full session (cookie, refreshed if
 		// stale) or a scoped PAT, then Scope() enforces per-route access:

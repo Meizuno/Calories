@@ -18,6 +18,7 @@ declare module 'vue' {
     RingChart: typeof import('./src/components/RingChart.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    StatsPanel: typeof import('./src/components/StatsPanel.vue')['default']
     UAccordion: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Accordion.vue')['default']
     UApp: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/App.vue')['default']
     UButton: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']

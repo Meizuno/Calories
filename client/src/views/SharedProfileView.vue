@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import type { Day, Profile } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
 import MealTable from "../components/MealTable.vue";
+import StatsPanel from "../components/StatsPanel.vue";
 
 const route = useRoute();
 const uuid = computed(() => route.params.uuid as string);
@@ -76,6 +77,18 @@ const k = (n: number) => Math.round(n);
       </div>
       <MealTable class="mt-2" :meal="m" />
     </div>
+
+    <!-- Read-only stats for the shared profile. Keyed by uuid so switching to a
+         different shared profile remounts (and refetches) the panel. -->
+    <StatsPanel
+      :key="uuid"
+      :fetch-stats="(from, to) => api.getSharedStats(uuid, from, to)"
+      :fetch-days="() => api.getSharedDays(uuid)"
+    >
+      <template #title>
+        <h2 class="text-base font-semibold sm:text-lg">Statistika</h2>
+      </template>
+    </StatsPanel>
   </div>
 
   <div v-else class="p-8 text-center text-gray-400">Načítání…</div>

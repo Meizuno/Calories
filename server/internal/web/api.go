@@ -244,23 +244,22 @@ type statsResp struct {
 	Days []dayTotalResp `json:"days"`
 }
 
-// GetStats returns per-day macro totals for ?from=&to= (YYYY-MM-DD, inclusive),
-// plus the profile's daily goal. Reversed bounds are swapped and the window is
-// capped at one year so a hand-crafted range can't ask for an unbounded scan.
-func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
+// statsRange parses ?from=&to= (YYYY-MM-DD, inclusive), swaps reversed bounds,
+// and caps the window at one year so a hand-crafted range can't ask for an
+// unbounded scan.
+func statsRange(r *http.Request) (from, to time.Time) {
 	q := r.URL.Query()
-	from, to := parseDate(q.Get("from")), parseDate(q.Get("to"))
+	from, to = parseDate(q.Get("from")), parseDate(q.Get("to"))
 	if from.After(to) {
 		from, to = to, from
 	}
 	if earliest := to.AddDate(-1, 0, 0); from.Before(earliest) {
 		from = earliest
 	}
-	sv, err := h.diary.GetStats(r.Context(), ProfileID(r.Context()), from, to)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	return from, to
+}
+
+func writeStats(w http.ResponseWriter, sv service.StatsView) {
 	days := make([]dayTotalResp, 0, len(sv.Days))
 	for _, d := range sv.Days {
 		days = append(days, dayTotalResp{
@@ -277,6 +276,55 @@ func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
 		Goal: mac(sv.Goal),
 		Days: days,
 	})
+}
+
+// GetStats returns per-day macro totals for the authenticated profile plus its
+// daily goal, over ?from=&to=.
+func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
+	from, to := statsRange(r)
+	sv, err := h.diary.GetStats(r.Context(), ProfileID(r.Context()), from, to)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeStats(w, sv)
+}
+
+// SharedStats is the public, read-only counterpart of GetStats for a profile
+// that opted into sharing, addressed by its public uuid.
+func (h *Handlers) SharedStats(w http.ResponseWriter, r *http.Request) {
+	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	from, to := statsRange(r)
+	sv, err := h.diary.GetStats(r.Context(), prof.ID, from, to)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeStats(w, sv)
+}
+
+// SharedDays lists the dates with logged data for a shared profile — used by the
+// stats view to disable stepping back past the earliest entry.
+func (h *Handlers) SharedDays(w http.ResponseWriter, r *http.Request) {
+	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	days, err := h.diary.ListDays(r.Context(), prof.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	out := make([]string, len(days))
+	for i, d := range days {
+		out[i] = d.Format("2006-01-02")
+	}
+	writeJSON(w, out)
 }
 
 func (h *Handlers) respondDay(w http.ResponseWriter, r *http.Request, profileID int64, date time.Time) {
