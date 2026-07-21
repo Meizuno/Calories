@@ -1,7 +1,7 @@
 # Calories — kalorie tracker
 
 <p align="center">
-  <img src="preview/demo.gif" alt="Calories demo — macro diary" width="760"><br>
+  <img src="preview/demo.gif" alt="Calories demo — macro diary and the weekly/monthly statistics" width="760"><br>
   <sub>▶ <a href="preview/demo.mp4">full-resolution MP4</a></sub>
 </p>
 
