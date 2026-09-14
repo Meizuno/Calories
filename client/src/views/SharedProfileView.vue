@@ -53,7 +53,7 @@ const k = (n: number) => Math.round(n);
 <template>
   <div v-if="error" class="p-8 text-center text-gray-400">{{ t("shared.notFound") }}</div>
 
-  <div v-else-if="profile" class="space-y-5">
+  <div v-else-if="profile" class="mx-auto max-w-3xl space-y-5">
     <h1 class="text-xl font-semibold sm:text-2xl">
       {{ profile.name || t("shared.title") }}
       <span class="text-sm font-normal text-gray-400">{{ t("shared.readOnly") }}</span>

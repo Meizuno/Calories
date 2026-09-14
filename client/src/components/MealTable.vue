@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import type { Meal, Entry } from "../lib/types";
 import { t } from "../lib/i18n";
+import { useReveal } from "../composables/useAnimatedNumber";
 
 const props = defineProps<{ meal: Meal; editable?: boolean; showNote?: boolean }>();
 const emit = defineEmits<{
@@ -23,6 +24,8 @@ const units = [
 const editingId = ref<number | null>(null);
 const draft = ref({ name: "", quantity: "", unit: "g", kcal: "0", carb: "0", protein: "0", fat: "0" });
 const numVal = (s: string) => Math.max(0, parseFloat(s) || 0);
+const k = (n: number) => Math.round(n);
+const g = (n: number) => Math.round(n * 10) / 10;
 
 function startEdit(e: Entry) {
   editingId.value = e.id;
@@ -56,16 +59,25 @@ function save(id: number) {
 const editing = (id: number) => props.editable && editingId.value === id;
 
 const showNote = () => props.showNote !== false;
-const k = (n: number) => Math.round(n);
-const g = (n: number) => Math.round(n * 10) / 10;
 
 // donut showing the entry's macro split (sky carbs / emerald protein / amber fat)
+// The macro-split ring sweeps clockwise when the meal first renders. A
+// conic-gradient cannot be transitioned in CSS, so the sweep is done by moving
+// the gradient stops each frame: everything past the current angle is left
+// transparent, and at full reveal the stops are exactly the static ones.
+const sweep = useReveal(() => true);
+
 function ringStyle(e: { carb: number; protein: number; fat: number }) {
-  const t = e.carb + e.protein + e.fat;
-  if (!t) return { background: "#3f4654" };
-  const c = (e.carb / t) * 100;
-  const cp = c + (e.protein / t) * 100;
-  return { background: `conic-gradient(#38bdf8 0 ${c}%, #34d399 ${c}% ${cp}%, #fbbf24 ${cp}% 100%)` };
+  const total = e.carb + e.protein + e.fat;
+  const drawn = 100 * sweep.value;
+  if (!total) return { background: `conic-gradient(#3f4654 0 ${drawn}%, transparent ${drawn}% 100%)` };
+  const carbEnd = (e.carb / total) * drawn;
+  const proteinEnd = carbEnd + (e.protein / total) * drawn;
+  return {
+    background:
+      `conic-gradient(#38bdf8 0 ${carbEnd}%, #34d399 ${carbEnd}% ${proteinEnd}%,` +
+      ` #fbbf24 ${proteinEnd}% ${drawn}%, transparent ${drawn}% 100%)`,
+  };
 }
 </script>
 
@@ -131,7 +143,7 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
 
     <!-- meal total -->
     <div v-if="meal.entries.length" class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-1.5">
-      <span class="font-semibold">Celkem</span>
+      <span class="font-semibold">{{ t("common.total") }}</span>
       <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums sm:text-base">
         <span><span class="text-gray-500">{{ t("macros.carbShort") }}</span> <b class="text-sky-600 dark:text-sky-400">{{ g(meal.total.carb) }} g</b></span>
         <span><span class="text-gray-500">{{ t("macros.proteinShort") }}</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(meal.total.protein) }} g</b></span>

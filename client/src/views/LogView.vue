@@ -66,7 +66,7 @@ async function addEntry() {
 </script>
 
 <template>
-  <div v-if="day" class="space-y-5">
+  <div v-if="day" class="mx-auto max-w-3xl space-y-5">
     <div class="flex items-center justify-between gap-3">
       <div>
         <h1 class="text-lg font-semibold sm:text-xl">{{ t("log.title") }}</h1>
