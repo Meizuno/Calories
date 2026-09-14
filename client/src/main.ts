@@ -5,6 +5,7 @@ import App from "./App.vue";
 import "./assets/main.css";
 import { initLocale } from "./lib/i18n";
 import "./lib/flags"; // registers the language-picker flags locally
+import "./lib/icons"; // and the small UI icons
 
 initLocale();
 createApp(App).use(router).use(ui).mount("#app");

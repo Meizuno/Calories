@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { ANIMATION_MS, EASE_OUT_CUBIC } from "../composables/useAnimatedNumber";
 
 const props = withDefaults(
   defineProps<{
@@ -9,8 +10,11 @@ const props = withDefaults(
     thickness?: number;
     color?: string;
     trackOpacity?: number;
+    /** The caller already tweens `value`; skip the CSS transition so the arc is
+        not smoothed twice and left lagging behind the figure it mirrors. */
+    animated?: boolean;
   }>(),
-  { size: 150, thickness: 14, color: "#10b981", trackOpacity: 0.18 },
+  { size: 150, thickness: 14, color: "#10b981", trackOpacity: 0.18, animated: false },
 );
 
 const center = computed(() => props.size / 2);
@@ -34,7 +38,7 @@ const offset = computed(() => circ.value * (1 - pct.value));
         stroke-linecap="round"
         :stroke-dasharray="circ"
         :stroke-dashoffset="offset"
-        style="transition: stroke-dashoffset 0.5s ease, stroke 0.3s ease"
+        :style="{ transition: `stroke 0.3s ease${animated ? '' : `, stroke-dashoffset ${ANIMATION_MS}ms ${EASE_OUT_CUBIC}`}` }"
       />
     </svg>
     <div class="absolute inset-0 grid place-items-center text-center leading-tight">

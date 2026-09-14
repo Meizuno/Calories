@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { t } from "../lib/i18n";
+import { useReveal } from "../composables/useAnimatedNumber";
 
 type Metric = "kcal" | "carb" | "protein" | "fat";
 
@@ -68,6 +69,10 @@ const grid = computed(() => {
 const fmtRaw = (v: number, unit: string) => (unit === "kcal" ? Math.round(v) : Math.round(v * 10) / 10);
 
 // Flatten to one rect per (bucket, metric); unlogged buckets draw nothing.
+// Bars grow up from the baseline when the data changes, so a new period reads
+// as the chart being redrawn rather than a different picture appearing.
+const reveal = useReveal(() => props.points);
+
 const rects = computed(() => {
   const out: { key: string; x: number; y: number; w: number; h: number; color: string; title: string }[] = [];
   props.points.forEach((p, i) => {
@@ -75,13 +80,14 @@ const rects = computed(() => {
     const x0 = PAD.left + slot.value * i + groupPad.value;
     METRICS.value.forEach((m, j) => {
       const pct = p.pct[m.key];
-      const y = yFor(pct);
+      const full = Math.max(0, baseline - yFor(pct));
+      const h = full * reveal.value;
       out.push({
         key: `${i}-${m.key}`,
         x: x0 + j * (barW.value + GAP),
-        y,
+        y: baseline - h,
         w: barW.value,
-        h: Math.max(0, baseline - y),
+        h,
         color: m.color,
         title: `${p.label} · ${m.label}: ${fmtRaw(p.raw[m.key], m.unit)} ${m.unit} (${Math.round(pct)} %)`,
       });

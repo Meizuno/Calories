@@ -20,6 +20,21 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
 const uiLocale = computed(() => (currentLocale() === "cs" ? uiCs : uiEn));
 // The switcher shows the language currently in use (flag + code); clicking it
 // moves to the next one. With two locales that is a plain toggle.
+// Primary destinations. Icon paths are inline so they render without the
+// Iconify CDN round-trip, the same reasoning as the locale flags.
+const navItems = computed(() => [
+  {
+    to: "/",
+    label: t("diary.title"),
+    icon: "M12 6.04A8.97 8.97 0 0 0 6 3.75c-1.05 0-2.06.18-3 .51v14.25A8.99 8.99 0 0 1 6 18c2.3 0 4.4.87 6 2.29m0-14.25a8.97 8.97 0 0 1 6-2.29c1.05 0 2.06.18 3 .51v14.25A8.99 8.99 0 0 0 18 18a8.97 8.97 0 0 0-6 2.29m0-14.25v14.25",
+  },
+  {
+    to: "/stats",
+    label: t("nav.stats"),
+    icon: "M3.75 20.25h16.5M7.5 20.25v-6.75m4.5 6.75V8.25m4.5 12V4.5",
+  },
+]);
+
 const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
 const activeLocale = computed(() => currentLocale());
 function cycleLocale() {
@@ -31,62 +46,98 @@ function cycleLocale() {
 <template>
   <UApp :locale="uiLocale">
     <header
-      class="sticky top-0 z-30 border-b border-gray-200/70 bg-white/75 backdrop-blur dark:border-gray-800/70 dark:bg-gray-950/70"
+      class="sticky top-0 z-30 border-b border-gray-200/60 bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/65 dark:border-gray-800/60 dark:bg-gray-950/80 dark:supports-[backdrop-filter]:bg-gray-950/65"
     >
-      <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
-        <RouterLink to="/" class="flex items-center gap-2 font-semibold">
-          <span class="grid h-8 w-8 place-items-center rounded-xl bg-emerald-500/15 text-lg">🥗</span>
-          <span class="text-base tracking-tight sm:text-lg">Calories</span>
+      <div class="mx-auto flex h-14 max-w-6xl items-center gap-2 px-3 sm:gap-3 sm:px-6">
+        <!-- Brand. Shrinks before anything else, and the wordmark drops away on
+             the narrowest screens so the controls always keep their room. -->
+        <RouterLink
+          to="/"
+          class="flex min-w-0 shrink items-center gap-2 rounded-xl font-semibold outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+        >
+          <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-emerald-500/15 text-lg">🥗</span>
+          <span class="truncate text-base tracking-tight sm:text-lg">Calories</span>
         </RouterLink>
 
-        <div class="flex items-center gap-1">
-        <UButton
-          color="neutral"
-          variant="ghost"
-          size="sm"
-          :icon="LOCALE_FLAGS[activeLocale]"
-          :label="activeLocale.toUpperCase()"
-          :title="LOCALE_NAMES[activeLocale]"
-          :aria-label="t('nav.language')"
-          class="gap-1.5 text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400"
-          @click="cycleLocale"
-        />
+        <template v-if="session.authenticated">
+          <!-- Primary navigation, as one segmented group so the two destinations
+               read as a pair rather than as loose links. Labels collapse to
+               icons on small screens — the diary used to be reachable only by
+               clicking the logo. -->
+          <nav class="ml-1 flex items-center gap-0.5 rounded-xl bg-gray-100/70 p-0.5 dark:bg-gray-900/70">
+            <RouterLink
+              v-for="item in navItems"
+              :key="item.to"
+              :to="item.to"
+              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-500 outline-none transition hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-emerald-500/60 dark:text-gray-400 dark:hover:text-gray-100"
+              active-class="bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-gray-100"
+              :aria-label="item.label"
+            >
+              <svg viewBox="0 0 24 24" class="size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path :d="item.icon" />
+              </svg>
+              <span class="hidden sm:inline">{{ item.label }}</span>
+            </RouterLink>
+          </nav>
 
-        <nav v-if="session.authenticated" class="flex items-center gap-1">
-          <RouterLink
-            to="/stats"
-            class="rounded-lg px-2.5 py-1.5 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            active-class="bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
-          >
-            {{ t("nav.stats") }}
-          </RouterLink>
+          <!-- Account cluster, pushed to the far edge. -->
+          <div class="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              class="flex size-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold uppercase tracking-wide text-gray-500 outline-none transition hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:w-auto sm:px-2.5 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+              :title="LOCALE_NAMES[activeLocale]"
+              :aria-label="t('nav.language')"
+              @click="cycleLocale"
+            >
+              <UIcon :name="LOCALE_FLAGS[activeLocale]" class="size-5 shrink-0" />
+              <span class="hidden sm:inline">{{ activeLocale }}</span>
+            </button>
 
-          <RouterLink
-            to="/profiles/me"
-            class="ml-1 flex items-center gap-2 rounded-full py-1 pl-1 pr-3 transition hover:bg-gray-100 dark:hover:bg-gray-800"
-            active-class="bg-gray-100 dark:bg-gray-800"
+            <RouterLink
+              to="/profiles/me"
+              class="flex max-w-[9rem] items-center gap-2 rounded-xl p-1 outline-none transition hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:pr-2.5 dark:hover:bg-gray-800"
+              active-class="bg-gray-100 dark:bg-gray-800"
+              :title="profileName || t('nav.profile')"
+            >
+              <span class="grid size-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xs font-semibold text-white">{{ initial }}</span>
+              <span class="hidden truncate text-sm text-gray-700 sm:inline dark:text-gray-200">{{ profileName || t("nav.profile") }}</span>
+            </RouterLink>
+
+            <!-- Signing out is not navigation, so it reads as a quiet icon
+                 rather than a third link of equal weight. -->
+            <button
+              type="button"
+              class="grid size-9 shrink-0 place-items-center rounded-xl text-gray-400 outline-none transition hover:bg-red-50 hover:text-red-600 focus-visible:ring-2 focus-visible:ring-red-500/60 dark:hover:bg-red-950/50 dark:hover:text-red-400"
+              :title="t('nav.logout')"
+              :aria-label="t('nav.logout')"
+              @click="logout"
+            >
+              <svg viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15M12 9l-3 3m0 0 3 3m-3-3h12.75" />
+              </svg>
+            </button>
+          </div>
+        </template>
+
+        <div v-else class="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            class="flex size-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold uppercase tracking-wide text-gray-500 outline-none transition hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:w-auto sm:px-2.5 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            :title="LOCALE_NAMES[activeLocale]"
+            :aria-label="t('nav.language')"
+            @click="cycleLocale"
           >
-            <span class="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-xs font-semibold text-white">{{ initial }}</span>
-            <span class="max-w-28 truncate text-sm text-gray-700 dark:text-gray-200">{{ profileName || t("nav.profile") }}</span>
-          </RouterLink>
+            <UIcon :name="LOCALE_FLAGS[activeLocale]" class="size-5 shrink-0" />
+            <span class="hidden sm:inline">{{ activeLocale }}</span>
+          </button>
 
           <button
             type="button"
-            class="ml-0.5 rounded-lg px-2.5 py-1.5 text-sm text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
-            @click="logout"
+            class="rounded-xl bg-emerald-500 px-3.5 py-2 text-sm font-medium text-white shadow-sm outline-none transition hover:bg-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/60 active:bg-emerald-700"
+            @click="router.push('/login')"
           >
-            {{ t("nav.logout") }}
+            {{ t("nav.login") }}
           </button>
-        </nav>
-
-        <button
-          v-else
-          type="button"
-          class="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-600"
-          @click="router.push('/login')"
-        >
-          {{ t("nav.login") }}
-        </button>
         </div>
       </div>
     </header>
@@ -117,7 +168,7 @@ function cycleLocale() {
       </div>
     </div>
 
-    <main class="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+    <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <RouterView />
     </main>
   </UApp>

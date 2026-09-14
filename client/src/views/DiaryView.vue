@@ -5,11 +5,16 @@ import { type DateValue, getLocalTimeZone, parseDate, today } from "@internation
 import { api } from "../lib/api";
 import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
+import WeekTrend from "../components/WeekTrend.vue";
+import { useMediaQuery } from "../composables/useMediaQuery";
 import MealTable from "../components/MealTable.vue";
 import { t, weekdayShort } from "../lib/i18n";
 
 const route = useRoute();
 const router = useRouter();
+// xl is the point at which the summary becomes a sticky column with room to
+// spare beneath it; below that the trend has nowhere useful to live.
+const isWide = useMediaQuery("(min-width: 1280px)");
 
 const pad = (n: number) => String(n).padStart(2, "0");
 // Local calendar date — not UTC, so "dnes" matches the user's actual day.
@@ -26,6 +31,7 @@ function shiftDate(d: string, n: number) {
   return t.toISOString().slice(0, 10);
 }
 const weekday = (d: string) => weekdayShort(d);
+const k = (n: number) => Math.round(n);
 
 function goto(d: string) {
   if (d > todayISO()) return; // no future days
@@ -123,39 +129,81 @@ async function onUpdateEntry(
   day.value = await api.updateEntry(date.value, id, body);
 }
 
-const k = (n: number) => Math.round(n);
 </script>
 
 <template>
   <div v-if="day" class="space-y-5">
-    <div class="flex items-center justify-between gap-2">
-      <!-- jump to today; disabled when today is already selected -->
-      <UButton size="sm" color="neutral" variant="soft" :label="t('common.today')" :disabled="isToday" @click="goto(todayISO())" />
+    <!-- From xl up the day summary becomes a column of its own and stays put
+         while the meals scroll, so the ring and macro bars remain visible
+         instead of disappearing off the top. Below xl it stacks exactly as
+         before: summary first, then meals. -->
+    <div class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start">
+      <aside class="order-1 xl:order-2 xl:sticky xl:top-20">
+        <DaySummary :day="day" sidebar>
+          <!-- Day selection sits with the day it describes, so in the sticky
+               column it stays reachable while the meals scroll. Wraps to a
+               second line in the narrow sidebar. -->
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+              <div class="flex min-w-0 items-center gap-0.5">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-ui-prev"
+                  :aria-label="t('common.previous')"
+                  @click="goto(shiftDate(date, -1))"
+                />
+                <span class="truncate px-1 text-base font-semibold tabular-nums">
+                  {{ date }} <span class="font-normal text-gray-400">({{ weekday(date) }})</span>
+                </span>
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="ghost"
+                  icon="i-ui-next"
+                  :disabled="isToday"
+                  :aria-label="t('common.next')"
+                  @click="goto(shiftDate(date, 1))"
+                />
+              </div>
 
-      <!-- prev / next arrows hugging the date -->
-      <div class="flex items-center gap-1">
-        <UButton size="xs" color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
-        <span class="px-1 text-base font-semibold tabular-nums sm:text-lg">{{ date }} <span class="text-gray-400">({{ weekday(date) }})</span></span>
-        <UButton size="xs" color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
-      </div>
+              <div class="ml-auto flex items-center gap-1">
+                <UButton
+                  size="xs"
+                  color="neutral"
+                  variant="soft"
+                  :label="t('common.today')"
+                  :disabled="isToday"
+                  @click="goto(todayISO())"
+                />
+                <UPopover v-model:open="calOpen">
+                  <UButton
+                    size="xs"
+                    color="neutral"
+                    variant="soft"
+                    icon="i-ui-calendar"
+                    :aria-label="t('diary.openCalendar')"
+                  />
+                  <template #content>
+                    <UCalendar
+                      :model-value="calValue"
+                      :max-value="maxDate"
+                      :is-date-unavailable="isUnavailable"
+                      class="p-2"
+                      @update:model-value="pickDate"
+                    />
+                  </template>
+                </UPopover>
+              </div>
+            </div>
+          </template>
+        </DaySummary>
 
-      <!-- calendar; only days that have data are selectable -->
-      <UPopover v-model:open="calOpen">
-        <UButton size="sm" color="neutral" variant="soft" label="📅" :aria-label="t('diary.openCalendar')" />
-        <template #content>
-          <UCalendar
-            :model-value="calValue"
-            :max-value="maxDate"
-            :is-date-unavailable="isUnavailable"
-            class="p-2"
-            @update:model-value="pickDate"
-          />
-        </template>
-      </UPopover>
-    </div>
+        <WeekTrend v-if="isWide" :date="date" class="mt-5 block" />
+      </aside>
 
-    <DaySummary :day="day" />
-
+      <div class="order-2 space-y-4 xl:order-1">
     <div class="flex items-center justify-between">
       <h2 class="text-base font-medium sm:text-lg">{{ t("diary.title") }}</h2>
       <div class="flex items-center gap-2">
@@ -164,7 +212,7 @@ const k = (n: number) => Math.round(n);
           size="xs"
           color="neutral"
           variant="soft"
-          ::label="allOpen ? t('diary.collapseAll') : t('diary.expandAll')"
+          :label="allOpen ? t('diary.collapseAll') : t('diary.expandAll')"
           @click="toggleAll"
         />
         <UButton size="xs" :label="t('diary.addEntry')" :to="{ path: '/log', query: { date } }" />
@@ -231,8 +279,10 @@ const k = (n: number) => Math.round(n);
     </UAccordion>
 
     <div v-else class="rounded-lg border border-dashed border-gray-200 p-8 text-center dark:border-gray-800">
-      <p class="text-sm text-gray-500">{{ t("diary.noMeals") }}</p>
-      <UButton class="mt-3" size="sm" :label="t('diary.addMeal')" :to="{ path: '/log', query: { date } }" />
+          <p class="text-sm text-gray-500">{{ t("diary.noMeals") }}</p>
+          <UButton class="mt-3" size="sm" :label="t('diary.addMeal')" :to="{ path: '/log', query: { date } }" />
+        </div>
+      </div>
     </div>
   </div>
 
