@@ -1,16 +1,18 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import type { Day } from "../lib/types";
+import { t } from "../lib/i18n";
 
 const props = defineProps<{ day: Day }>();
 
 const g = (n: number) => Math.round(n * 10) / 10;
 const pct = (eaten: number, target: number) => (target > 0 ? Math.min((eaten / target) * 100, 100) : 0);
 
-const macros = [
-  { key: "carb", label: "Sacharidy", color: "#0ea5e9" },
-  { key: "protein", label: "Bílkoviny", color: "#10b981" },
-  { key: "fat", label: "Tuky", color: "#f59e0b" },
-] as const;
+const macros = computed(() => [
+  { key: "carb", label: t("macros.carb"), color: "#0ea5e9" },
+  { key: "protein", label: t("macros.protein"), color: "#10b981" },
+  { key: "fat", label: t("macros.fat"), color: "#f59e0b" },
+] as const);
 </script>
 
 <template>

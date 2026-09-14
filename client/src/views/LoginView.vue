@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { login, register, loginWithGoogle, session } from "../lib/session";
 import { ApiError } from "../lib/http";
+import { t } from "../lib/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -13,7 +14,8 @@ const form = ref({ email: "", password: "", name: "" });
 const busy = ref(false);
 // Google failures come back as ?error= on a redirect, since the browser arrives
 // here by navigation with no fetch waiting to read a response body.
-const error = ref(typeof route.query.error === "string" ? route.query.error : "");
+const errorCode = ref(typeof route.query.error === "string" ? route.query.error : "");
+const error = computed(() => (errorCode.value ? t(`errors.${errorCode.value}`) : ""));
 
 // Sign-up only exists when the server allows it; otherwise the form and the
 // "create an account" footer are hidden entirely, so nobody meets a 403.
@@ -22,12 +24,12 @@ const returnTo = computed(() => (typeof route.query.return === "string" && route
 
 function switchMode(to: "login" | "register") {
   mode.value = to;
-  error.value = "";
+  errorCode.value = "";
 }
 
 async function submit() {
   if (busy.value) return;
-  error.value = "";
+  errorCode.value = "";
   busy.value = true;
   try {
     if (isRegister.value) {
@@ -38,7 +40,9 @@ async function submit() {
     // A brand-new account still has to fill in the goal before using the diary.
     router.replace(session.profile?.onboarded ? returnTo.value : "/profiles/me");
   } catch (e) {
-    error.value = e instanceof ApiError ? e.message : "Přihlášení se nezdařilo, zkus to prosím znovu.";
+    // Translate the API's code; a network failure has none, so fall back.
+    errorCode.value = e instanceof ApiError ? e.code : "";
+    if (!errorCode.value) errorCode.value = "unknown";
   } finally {
     busy.value = false;
   }
@@ -49,7 +53,7 @@ async function submit() {
   <div class="mx-auto max-w-sm space-y-5 py-6">
     <div class="space-y-2 text-center">
       <div class="text-4xl">🥗</div>
-      <h1 class="text-xl font-semibold sm:text-2xl">{{ isRegister ? "Vytvořit účet" : "Přihlášení" }}</h1>
+      <h1 class="text-xl font-semibold sm:text-2xl">{{ isRegister ? t("auth.createAccount") : t("auth.signIn") }}</h1>
     </div>
 
     <UCard>
@@ -59,33 +63,33 @@ async function submit() {
         </p>
 
         <label v-if="isRegister" class="block">
-          <span class="mb-1 block text-xs text-gray-500">Jméno</span>
-          <UInput v-model="form.name" autocomplete="name" placeholder="Tvé jméno" />
+          <span class="mb-1 block text-xs text-gray-500">{{ t("auth.name") }}</span>
+          <UInput v-model="form.name" autocomplete="name" :placeholder="t('auth.namePlaceholder')" />
         </label>
 
         <label class="block">
-          <span class="mb-1 block text-xs text-gray-500">E-mail</span>
-          <UInput v-model="form.email" type="email" autocomplete="email" required placeholder="ty@example.com" />
+          <span class="mb-1 block text-xs text-gray-500">{{ t("auth.email") }}</span>
+          <UInput v-model="form.email" type="email" autocomplete="email" required :placeholder="t('auth.emailPlaceholder')" />
         </label>
 
         <label class="block">
-          <span class="mb-1 block text-xs text-gray-500">Heslo</span>
+          <span class="mb-1 block text-xs text-gray-500">{{ t("auth.password") }}</span>
           <UInput
             v-model="form.password"
             type="password"
             :autocomplete="isRegister ? 'new-password' : 'current-password'"
             required
-            :placeholder="isRegister ? 'Alespoň 8 znaků' : '••••••••'"
+            :placeholder="isRegister ? t('auth.passwordMin') : t('auth.passwordMask')"
           />
         </label>
 
-        <UButton type="submit" block :loading="busy" :label="isRegister ? 'Vytvořit účet' : 'Přihlásit se'" />
+        <UButton type="submit" block :loading="busy" :label="isRegister ? t('auth.createAccount') : t('auth.signInAction')" />
       </form>
 
       <template v-if="session.google">
         <div class="my-4 flex items-center gap-3 text-xs text-gray-400">
           <span class="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-          nebo
+          {{ t("auth.or") }}
           <span class="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
         </div>
         <UButton
@@ -93,7 +97,7 @@ async function submit() {
           color="neutral"
           variant="outline"
           icon="i-simple-icons-google"
-          label="Pokračovat s Google"
+          :label="t('auth.google')"
           @click="loginWithGoogle(returnTo)"
         />
       </template>
@@ -101,12 +105,12 @@ async function submit() {
 
     <p v-if="session.registration" class="text-center text-sm text-gray-500">
       <template v-if="isRegister">
-        Už máš účet?
-        <UButton variant="link" size="sm" label="Přihlásit se" @click="switchMode('login')" />
+        {{ t("auth.haveAccount") }}
+        <UButton variant="link" size="sm" :label="t('auth.signInAction')" @click="switchMode('login')" />
       </template>
       <template v-else>
-        Nemáš účet?
-        <UButton variant="link" size="sm" label="Zaregistrovat se" @click="switchMode('register')" />
+        {{ t("auth.noAccount") }}
+        <UButton variant="link" size="sm" :label="t('auth.registerLink')" @click="switchMode('register')" />
       </template>
     </p>
   </div>

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import type { Stats } from "../lib/types";
 import PeriodChart, { type DayBars } from "./PeriodChart.vue";
+import { t, weekdayShort, formatMonth, formatDate } from "../lib/i18n";
 
 // Reusable stats UI: period stepper + combined %-of-goal bar chart + summary.
 // Data comes from an injected `fetchStats` so the same panel serves both the
@@ -41,10 +42,8 @@ function addMonthsISO(iso: string, n: number) {
   return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 10);
 }
 
-const WD = ["Ne", "Po", "Út", "St", "Čt", "Pá", "So"]; // getUTCDay: 0 = Sunday
-const weekdayShort = (iso: string) => WD[new Date(iso + "T00:00:00Z").getUTCDay()];
+// Weekday and month names come from Intl, so they follow the chosen language.
 const dayOfMonth = (iso: string) => Number(iso.split("-")[2]);
-const CZ_MONTHS = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
 
 // ── period stepping ──────────────────────────────────────────────────────────
 type Gran = "week" | "month";
@@ -98,12 +97,11 @@ function jumpNow() {
   anchor.value = todayISO();
 }
 
-const fmtDM = (iso: string) => `${dayOfMonth(iso)}. ${Number(iso.split("-")[1])}.`;
+const fmtDM = (iso: string) => formatDate(iso, { day: "numeric", month: "numeric" });
 const periodLabel = computed(() => {
   if (gran.value === "week") return `${fmtDM(range.value.from)} – ${fmtDM(range.value.to)} ${range.value.to.slice(0, 4)}`;
-  const [y, m] = range.value.from.split("-").map(Number);
-  const name = CZ_MONTHS[m - 1];
-  return `${name[0].toUpperCase()}${name.slice(1)} ${y}`;
+  const name = formatMonth(range.value.from);
+  return `${name[0].toUpperCase()}${name.slice(1)}`;
 });
 
 // ── data ─────────────────────────────────────────────────────────────────────
@@ -208,13 +206,13 @@ const summary = computed(() => {
 });
 
 const fmt = (v: number, m: Metric) => (m === "kcal" ? Math.round(v) : Math.round(v * 10) / 10);
-const SUMMARY = [
-  { key: "kcal" as Metric, label: "Kalorie", unit: "kcal", color: "#8b5cf6" },
-  { key: "carb" as Metric, label: "Sacharidy", unit: "g", color: "#0ea5e9" },
-  { key: "protein" as Metric, label: "Bílkoviny", unit: "g", color: "#10b981" },
-  { key: "fat" as Metric, label: "Tuky", unit: "g", color: "#f59e0b" },
-];
-const avgLabel = computed(() => (gran.value === "week" ? "Ø / den" : "Ø / den (v týdnu)"));
+const SUMMARY = computed(() => [
+  { key: "kcal" as Metric, label: t("macros.calories"), unit: "kcal", color: "#8b5cf6" },
+  { key: "carb" as Metric, label: t("macros.carb"), unit: "g", color: "#0ea5e9" },
+  { key: "protein" as Metric, label: t("macros.protein"), unit: "g", color: "#10b981" },
+  { key: "fat" as Metric, label: t("macros.fat"), unit: "g", color: "#f59e0b" },
+]);
+const avgLabel = computed(() => (gran.value === "week" ? t("stats.avgPerDay") : t("stats.avgPerDayInWeek")));
 </script>
 
 <template>
@@ -222,18 +220,18 @@ const avgLabel = computed(() => (gran.value === "week" ? "Ø / den" : "Ø / den 
     <div class="flex flex-wrap items-center justify-between gap-3">
       <slot name="title"><span></span></slot>
       <div class="flex gap-1.5">
-        <UButton size="xs" :color="gran === 'week' ? 'primary' : 'neutral'" :variant="gran === 'week' ? 'solid' : 'soft'" label="Týden" @click="gran = 'week'" />
-        <UButton size="xs" :color="gran === 'month' ? 'primary' : 'neutral'" :variant="gran === 'month' ? 'solid' : 'soft'" label="Měsíc" @click="gran = 'month'" />
+        <UButton size="xs" :color="gran === 'week' ? 'primary' : 'neutral'" :variant="gran === 'week' ? 'solid' : 'soft'" :label="t('stats.week')" @click="gran = 'week'" />
+        <UButton size="xs" :color="gran === 'month' ? 'primary' : 'neutral'" :variant="gran === 'month' ? 'solid' : 'soft'" :label="t('stats.month')" @click="gran = 'month'" />
       </div>
     </div>
 
     <!-- period stepper -->
     <div class="flex items-center justify-between gap-2">
-      <UButton size="sm" color="neutral" variant="soft" :label="gran === 'week' ? 'Tento týden' : 'Tento měsíc'" :disabled="atCurrent" @click="jumpNow" />
+      <UButton size="sm" color="neutral" variant="soft" :label="gran === 'week' ? t('stats.thisWeek') : t('stats.thisMonth')" :disabled="atCurrent" @click="jumpNow" />
       <div class="flex items-center gap-1">
-        <UButton size="xs" color="neutral" variant="soft" label="←" aria-label="Předchozí" :disabled="!canPrev" @click="prev" />
+        <UButton size="xs" color="neutral" variant="soft" label="←" :aria-label="t('common.previous')" :disabled="!canPrev" @click="prev" />
         <span class="min-w-40 px-1 text-center text-sm font-semibold tabular-nums sm:text-base">{{ periodLabel }}</span>
-        <UButton size="xs" color="neutral" variant="soft" label="→" aria-label="Další" :disabled="atCurrent" @click="next" />
+        <UButton size="xs" color="neutral" variant="soft" label="→" :aria-label="t('common.next')" :disabled="atCurrent" @click="next" />
       </div>
     </div>
 
@@ -254,10 +252,10 @@ const avgLabel = computed(() => (gran.value === "week" ? "Ø / den" : "Ø / den 
 
     <!-- combined chart -->
     <UCard :ui="{ body: 'p-3 sm:p-4' }">
-      <div v-if="loading" class="grid h-[264px] place-items-center text-sm text-gray-400">Načítání…</div>
-      <div v-else-if="error" class="grid h-[264px] place-items-center text-sm text-red-500">Nepodařilo se načíst data.</div>
+      <div v-if="loading" class="grid h-[264px] place-items-center text-sm text-gray-400">{{ t("common.loading") }}</div>
+      <div v-else-if="error" class="grid h-[264px] place-items-center text-sm text-red-500">{{ t("stats.loadFailed") }}</div>
       <div v-else-if="!hasData" class="grid h-[264px] place-items-center text-center text-sm text-gray-500">
-        V tomto období nejsou žádná data.
+        {{ t("stats.noData") }}
       </div>
       <template v-else>
         <div class="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">

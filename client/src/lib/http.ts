@@ -37,6 +37,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Stable code from the API ("bad_credentials", …), translated for display. */
+    readonly code = "unknown",
   ) {
     super(message);
   }
@@ -61,12 +63,24 @@ export async function apiFetch<T>(path: string, opts: Options = {}): Promise<T> 
     }
     if (res.status === 401) {
       onAuthLost();
-      throw new ApiError(401, "Your session has expired — please sign in again.");
+      throw new ApiError(401, "session expired", "session_expired");
     }
   }
 
   if (!res.ok) {
-    throw new ApiError(res.status, (await res.text()).trim() || `Request failed (${res.status})`);
+    // Errors come back as {code, message}; fall back to the raw body for any
+    // route that still replies in plain text.
+    const body = (await res.text()).trim();
+    let code = "unknown";
+    let message = body || `Request failed (${res.status})`;
+    try {
+      const parsed = JSON.parse(body) as { code?: string; message?: string };
+      if (parsed.code) code = parsed.code;
+      if (parsed.message) message = parsed.message;
+    } catch {
+      // not JSON — keep the raw text
+    }
+    throw new ApiError(res.status, message, code);
   }
   // 204 No Content has no body to parse.
   if (res.status === 204) return undefined as T;

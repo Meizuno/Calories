@@ -2,6 +2,8 @@
 import { computed } from "vue";
 import { RouterLink, RouterView, useRouter } from "vue-router";
 import { session, logout } from "./lib/session";
+import { t, currentLocale, setLocale, LOCALE_NAMES, LOCALE_FLAGS, type Locale } from "./lib/i18n";
+import { cs as uiCs, en as uiEn } from "@nuxt/ui/locale";
 import { usePullToRefresh } from "./composables/usePullToRefresh";
 
 const router = useRouter();
@@ -12,10 +14,22 @@ const initial = computed(() => (profileName.value ? profileName.value.charAt(0).
 // on mobile (the app re-fetches from the API on boot). Default onTrigger is
 // window.location.reload().
 const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePullToRefresh();
+
+// Hand Nuxt UI the matching locale so its own components (the calendar, menus)
+// speak the same language as our strings.
+const uiLocale = computed(() => (currentLocale() === "cs" ? uiCs : uiEn));
+// The switcher shows the language currently in use (flag + code); clicking it
+// moves to the next one. With two locales that is a plain toggle.
+const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
+const activeLocale = computed(() => currentLocale());
+function cycleLocale() {
+  const next = LOCALES[(LOCALES.indexOf(activeLocale.value) + 1) % LOCALES.length];
+  setLocale(next);
+}
 </script>
 
 <template>
-  <UApp>
+  <UApp :locale="uiLocale">
     <header
       class="sticky top-0 z-30 border-b border-gray-200/70 bg-white/75 backdrop-blur dark:border-gray-800/70 dark:bg-gray-950/70"
     >
@@ -25,13 +39,26 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
           <span class="text-base tracking-tight sm:text-lg">Calories</span>
         </RouterLink>
 
+        <div class="flex items-center gap-1">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :icon="LOCALE_FLAGS[activeLocale]"
+          :label="activeLocale.toUpperCase()"
+          :title="LOCALE_NAMES[activeLocale]"
+          :aria-label="t('nav.language')"
+          class="gap-1.5 text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400"
+          @click="cycleLocale"
+        />
+
         <nav v-if="session.authenticated" class="flex items-center gap-1">
           <RouterLink
             to="/stats"
             class="rounded-lg px-2.5 py-1.5 text-sm text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             active-class="bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
           >
-            Statistika
+            {{ t("nav.stats") }}
           </RouterLink>
 
           <RouterLink
@@ -40,7 +67,7 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
             active-class="bg-gray-100 dark:bg-gray-800"
           >
             <span class="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-xs font-semibold text-white">{{ initial }}</span>
-            <span class="max-w-28 truncate text-sm text-gray-700 dark:text-gray-200">{{ profileName || "Profil" }}</span>
+            <span class="max-w-28 truncate text-sm text-gray-700 dark:text-gray-200">{{ profileName || t("nav.profile") }}</span>
           </RouterLink>
 
           <button
@@ -48,7 +75,7 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
             class="ml-0.5 rounded-lg px-2.5 py-1.5 text-sm text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
             @click="logout"
           >
-            Odhlásit
+            {{ t("nav.logout") }}
           </button>
         </nav>
 
@@ -58,8 +85,9 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
           class="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-600"
           @click="router.push('/login')"
         >
-          Přihlásit
+          {{ t("nav.login") }}
         </button>
+        </div>
       </div>
     </header>
 
@@ -85,7 +113,7 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
         >
           <path d="M12 5v14M5 12l7 7 7-7" />
         </svg>
-        <span>{{ pullReady ? "Uvolněte pro obnovení" : "Táhněte pro obnovení" }}</span>
+        <span>{{ pullReady ? t("pull.release") : t("pull.pull") }}</span>
       </div>
     </div>
 

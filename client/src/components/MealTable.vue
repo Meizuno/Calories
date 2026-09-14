@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { Meal, Entry } from "../lib/types";
+import { t } from "../lib/i18n";
 
 const props = defineProps<{ meal: Meal; editable?: boolean; showNote?: boolean }>();
 const emit = defineEmits<{
@@ -79,23 +80,23 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
     >
       <!-- edit form -->
       <div v-if="editing(e.id)" class="space-y-2">
-        <UInput v-model="draft.name" size="sm" class="w-full" placeholder="Název" />
+        <UInput v-model="draft.name" size="sm" class="w-full" :placeholder="t('diary.entryNamePlaceholder')" />
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <label class="text-xs text-gray-500">
-            Množství
+            {{ t("common.quantity") }}
             <div class="mt-0.5 flex gap-1">
               <UInput v-model="draft.quantity" type="number" step="any" min="0" size="sm" class="min-w-0 flex-1" />
               <USelect v-model="draft.unit" :items="units" size="sm" class="w-20 min-w-0" />
             </div>
           </label>
           <label class="text-xs text-gray-500">kcal<UInput v-model="draft.kcal" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-sky-400">Sach.<UInput v-model="draft.carb" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-emerald-400">Bílk.<UInput v-model="draft.protein" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-amber-400">Tuky<UInput v-model="draft.fat" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-sky-400">{{ t("macros.carbShort") }}.<UInput v-model="draft.carb" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-emerald-400">{{ t("macros.proteinShort") }}.<UInput v-model="draft.protein" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-amber-400">{{ t("macros.fatShort") }}<UInput v-model="draft.fat" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
         </div>
         <div class="flex justify-end gap-2">
-          <UButton size="xs" label="Uložit" @click="save(e.id)" />
-          <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancel" />
+          <UButton size="xs" :label="t('common.save')" @click="save(e.id)" />
+          <UButton size="xs" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancel" />
         </div>
       </div>
 
@@ -116,9 +117,9 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
         </div>
         <div class="mt-2 flex items-center justify-between gap-2 border-t border-gray-200 pt-2 dark:border-gray-800">
           <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums sm:text-base">
-            <span><span class="text-gray-500">Sach</span> <b class="text-sky-600 dark:text-sky-400">{{ g(e.carb) }} g</b></span>
-            <span><span class="text-gray-500">Bílk</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(e.protein) }} g</b></span>
-            <span><span class="text-gray-500">Tuky</span> <b class="text-amber-600 dark:text-amber-400">{{ g(e.fat) }} g</b></span>
+            <span><span class="text-gray-500">{{ t("macros.carbShort") }}</span> <b class="text-sky-600 dark:text-sky-400">{{ g(e.carb) }} g</b></span>
+            <span><span class="text-gray-500">{{ t("macros.proteinShort") }}</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(e.protein) }} g</b></span>
+            <span><span class="text-gray-500">{{ t("macros.fatShort") }}</span> <b class="text-amber-600 dark:text-amber-400">{{ g(e.fat) }} g</b></span>
           </div>
           <div v-if="editable" class="-mr-1 flex shrink-0">
             <UButton size="xs" color="neutral" variant="ghost" label="✎" class="size-7 justify-center p-0" @click="startEdit(e)" />
@@ -132,9 +133,9 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
     <div v-if="meal.entries.length" class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 pt-1.5">
       <span class="font-semibold">Celkem</span>
       <div class="flex flex-wrap gap-x-4 gap-y-1 text-sm tabular-nums sm:text-base">
-        <span><span class="text-gray-500">Sach</span> <b class="text-sky-600 dark:text-sky-400">{{ g(meal.total.carb) }} g</b></span>
-        <span><span class="text-gray-500">Bílk</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(meal.total.protein) }} g</b></span>
-        <span><span class="text-gray-500">Tuky</span> <b class="text-amber-600 dark:text-amber-400">{{ g(meal.total.fat) }} g</b></span>
+        <span><span class="text-gray-500">{{ t("macros.carbShort") }}</span> <b class="text-sky-600 dark:text-sky-400">{{ g(meal.total.carb) }} g</b></span>
+        <span><span class="text-gray-500">{{ t("macros.proteinShort") }}</span> <b class="text-emerald-600 dark:text-emerald-400">{{ g(meal.total.protein) }} g</b></span>
+        <span><span class="text-gray-500">{{ t("macros.fatShort") }}</span> <b class="text-amber-600 dark:text-amber-400">{{ g(meal.total.fat) }} g</b></span>
       </div>
       <span class="ml-auto"><b class="text-base tabular-nums">{{ k(meal.total.kcal) }}</b> <span class="text-[11px] text-gray-500">kcal</span></span>
     </div>

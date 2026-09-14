@@ -73,7 +73,28 @@ type GoogleUser struct {
 	Name          string `json:"name"`
 }
 
-var errOAuthState = errors.New("sign-in expired or was tampered with — please try again")
+// Sentinel OAuth failures. oauthCode turns each into the error code the SPA
+// translates; the text here is for logs only.
+var (
+	errOAuthState      = errors.New("sign-in expired or was tampered with")
+	errOAuthCancelled  = errors.New("google sign-in was cancelled")
+	errOAuthRejected   = errors.New("google rejected the sign-in")
+	errOAuthUnverified = errors.New("google account has no verified email address")
+)
+
+// oauthCode maps an Exchange failure to a stable client-side code.
+func oauthCode(err error) string {
+	switch {
+	case errors.Is(err, errOAuthState):
+		return "oauth_state"
+	case errors.Is(err, errOAuthCancelled):
+		return "oauth_cancelled"
+	case errors.Is(err, errOAuthUnverified):
+		return "oauth_unverified"
+	default:
+		return "oauth_failed"
+	}
+}
 
 // Exchange validates the callback, swaps the code for a token and reads the
 // profile. It returns where the browser should land afterwards alongside the user.
@@ -90,7 +111,7 @@ func (g *Google) Exchange(w http.ResponseWriter, r *http.Request) (GoogleUser, s
 		return GoogleUser{}, back, errOAuthState
 	}
 	if e := r.URL.Query().Get("error"); e != "" {
-		return GoogleUser{}, back, errors.New("google sign-in was cancelled")
+		return GoogleUser{}, back, errOAuthCancelled
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
@@ -99,7 +120,7 @@ func (g *Google) Exchange(w http.ResponseWriter, r *http.Request) (GoogleUser, s
 
 	tok, err := g.cfg.Exchange(r.Context(), code)
 	if err != nil {
-		return GoogleUser{}, back, errors.New("google rejected the sign-in")
+		return GoogleUser{}, back, errOAuthRejected
 	}
 	u, err := g.userinfo(r.Context(), tok)
 	if err != nil {
@@ -108,7 +129,7 @@ func (g *Google) Exchange(w http.ResponseWriter, r *http.Request) (GoogleUser, s
 	// Accounts are linked by email, so an unverified one would let a Google user
 	// claim someone else's account.
 	if u.Sub == "" || u.Email == "" || !u.EmailVerified {
-		return GoogleUser{}, back, errors.New("your google account has no verified email address")
+		return GoogleUser{}, back, errOAuthUnverified
 	}
 	return u, back, nil
 }
@@ -124,15 +145,15 @@ func (g *Google) userinfo(ctx context.Context, tok *oauth2.Token) (GoogleUser, e
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	resp, err := g.client.Do(req)
 	if err != nil {
-		return GoogleUser{}, errors.New("could not reach google")
+		return GoogleUser{}, errOAuthRejected
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return GoogleUser{}, errors.New("google rejected the sign-in")
+		return GoogleUser{}, errOAuthRejected
 	}
 	var u GoogleUser
 	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
-		return GoogleUser{}, errors.New("unexpected response from google")
+		return GoogleUser{}, errOAuthRejected
 	}
 	return u, nil
 }
