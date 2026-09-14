@@ -1,16 +1,25 @@
-// Command seed populates a dev user with a sample food catalog and a few days of
-// meals + entries. LOCAL DEV tool — the Dockerfile builds only ./cmd/server, so
-// this never ships in production. Run: `go run ./cmd/seed` (uses DATABASE_URL).
+// Command seed creates a dev account and populates it with a sample food catalog
+// and a few days of meals + entries. LOCAL DEV tool — the Dockerfile builds only
+// ./cmd/server, so this never ships in production. Run: `go run ./cmd/seed`
+// (uses DATABASE_URL); sign in afterwards with the credentials it prints.
 package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"os"
 	"time"
 
 	"github.com/Meizuno/calories/config"
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store"
+)
+
+// The account the seeded diary belongs to. Override with SEED_EMAIL/SEED_PASSWORD.
+const (
+	defaultSeedEmail    = "dev@example.com"
+	defaultSeedPassword = "devpassword"
 )
 
 type foodSpec struct {
@@ -42,8 +51,25 @@ func main() {
 	diary := service.NewDiary(st.Queries)
 	profiles := service.NewProfiles(st.Queries)
 
+	// Auth is local now, so the seed needs a real account to hang the diary off.
+	// Registering is idempotent here: an existing dev account is simply reused.
+	auth := service.NewAuth(st.Queries, cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
+	email := envOr("SEED_EMAIL", defaultSeedEmail)
+	password := envOr("SEED_PASSWORD", defaultSeedPassword)
+
+	user, err := auth.Register(ctx, email, password, "Dev")
+	if errors.Is(err, service.ErrEmailTaken) {
+		user, err = auth.Login(ctx, email, password)
+		if err != nil {
+			log.Fatalf("seed: %s already exists with a different password — set SEED_PASSWORD", email)
+		}
+	}
+	if err != nil {
+		log.Fatalf("account: %v", err)
+	}
+
 	// Everything hangs off a profile; ensure one exists for the dev user.
-	prof, err := profiles.Ensure(ctx, cfg.DevUserID)
+	prof, err := profiles.Ensure(ctx, user.ID)
 	if err != nil {
 		log.Fatalf("profile: %v", err)
 	}
@@ -56,7 +82,7 @@ func main() {
 	}
 
 	if existing, _ := catalog.List(ctx, pid); len(existing) > 0 {
-		log.Printf("seed: profile %d (user %s) already has %d foods — nothing to do (use a fresh DB to reseed)", pid, cfg.DevUserID, len(existing))
+		log.Printf("seed: profile %d (%s) already has %d foods — nothing to do (use a fresh DB to reseed)", pid, email, len(existing))
 		return
 	}
 
@@ -139,6 +165,14 @@ func main() {
 		}
 	}
 
-	log.Printf("seed: done for profile %d (user %s) — name Dev, goal 2400/250/180/70, %d foods, %d days × %d meals with entries",
-		pid, cfg.DevUserID, len(foods), seedDays, len(mealNames))
+	log.Printf("seed: done for profile %d — name Dev, goal 2400/250/180/70, %d foods, %d days × %d meals with entries",
+		pid, len(foods), seedDays, len(mealNames))
+	log.Printf("seed: sign in at http://localhost:5173/login with %s / %s", email, password)
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }

@@ -49,10 +49,24 @@ func main() {
 	catalog := service.NewCatalog(st.Queries)
 	profiles := service.NewProfiles(st.Queries)
 	tokens := service.NewTokens(st.Queries)
+	authsvc := service.NewAuth(st.Queries, cfg.JWTSecret, cfg.AccessTTL, cfg.RefreshTTL)
 
-	auth := web.NewAuth(cfg.AuthValidateURL, cfg.AuthRefreshURL, cfg.DevUserID)
-	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, cfg.AuthLoginURL, cfg.AuthLogoutURL, cfg.CookieDomain)
+	google := web.NewGoogle(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GoogleRedirectURL, cfg.SecureCookies)
+	if google == nil {
+		slog.Info("google sign-in disabled (GOOGLE_CLIENT_ID/SECRET/REDIRECT_URL not set)")
+	} else {
+		slog.Info("google sign-in enabled", "allowed", cfg.GoogleAllowedEmails)
+	}
+	if !cfg.AllowRegistration {
+		slog.Info("registration closed (set ALLOW_REGISTRATION=true to open it)")
+	}
+	auth := web.NewAuth(authsvc, cfg.SecureCookies)
+	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, authsvc, google, cfg.GoogleAllowedEmails, cfg.AllowRegistration)
 	gate := web.NewGate(auth, profiles, tokens)
+
+	// Spent refresh rows accumulate as sessions rotate; drop the long-expired ones
+	// daily so the table stays small.
+	go purgeExpiredTokens(ctx, authsvc)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           web.NewRouter(h, gate, cfg.ClientDir),
@@ -73,6 +87,20 @@ func main() {
 	sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(sctx)
+}
+
+// purgeExpiredTokens sweeps spent refresh rows once at boot and daily after.
+func purgeExpiredTokens(ctx context.Context, authsvc *service.Auth) {
+	for {
+		if err := authsvc.PurgeExpired(ctx); err != nil {
+			slog.Warn("purge expired refresh tokens", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(24 * time.Hour):
+		}
+	}
 }
 
 func fatal(msg string, err error) {

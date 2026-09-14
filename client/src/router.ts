@@ -4,13 +4,15 @@ import LogView from "./views/LogView.vue";
 import StatsView from "./views/StatsView.vue";
 import ProfileView from "./views/ProfileView.vue";
 import SharedProfileView from "./views/SharedProfileView.vue";
-import { session, loadSession, redirectToLogin } from "./lib/session";
+import LoginView from "./views/LoginView.vue";
+import { session, loadSession } from "./lib/session";
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     // Home: the diary for authenticated users, the welcome screen for anonymous.
     { path: "/", component: HomeView },
+    { path: "/login", component: LoginView, meta: { public: true } },
     { path: "/log", component: LogView },
     { path: "/stats", component: StatsView },
     { path: "/profiles/me", component: ProfileView },
@@ -21,8 +23,12 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   await loadSession();
 
-  // Public shared profile — anyone, no onboarding gate.
-  if (to.meta.public) return true;
+  // Public: the shared profile view and the sign-in page. A signed-in visitor
+  // has no business on /login, so send them on to the app.
+  if (to.meta.public) {
+    if (to.path === "/login" && session.authenticated) return "/";
+    return true;
+  }
 
   // Home is open to all (welcome vs diary), but a signed-in user who hasn't
   // finished onboarding is funnelled to the profile form first.
@@ -31,10 +37,10 @@ router.beforeEach(async (to) => {
     return true;
   }
 
-  // Everything else requires a session.
+  // Everything else requires a session. Remember where they were going so the
+  // sign-in lands them back here.
   if (!session.authenticated) {
-    redirectToLogin();
-    return false;
+    return { path: "/login", query: { return: to.fullPath } };
   }
   if (!session.profile?.onboarded && to.path !== "/profiles/me") return "/profiles/me";
   return true;

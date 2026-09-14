@@ -2,10 +2,11 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/Meizuno/calories/internal/service"
 )
 
 type ctxKey int
@@ -17,7 +18,19 @@ const (
 	fullKey
 )
 
-// UserID returns the authenticated external user id placed in the context by Auth.
+// Cookie names. Both are HttpOnly, so script on the page can never read them —
+// the SPA only learns about the session through /api/session.
+const (
+	accessCookie  = "access_token"
+	refreshCookie = "refresh_token"
+	// The refresh cookie is confined to /api/auth, so it rides along only with
+	// refresh and logout instead of every API request. The access JWT is what
+	// authenticates normal traffic; when it expires the SPA calls
+	// POST /api/auth/refresh once and retries.
+	refreshPath = "/api/auth"
+)
+
+// UserID returns the authenticated local user id placed in the context by Auth.
 func UserID(ctx context.Context) string {
 	v, _ := ctx.Value(userIDKey).(string)
 	return v
@@ -41,24 +54,23 @@ func IsFull(ctx context.Context) bool {
 	return v
 }
 
-// Auth resolves the current user via the meizuno SSO (/validate), falling back
-// to a dev user id when no token is present or no validate URL is configured.
+// Auth resolves the current user from this app's own tokens: a signed access JWT
+// in a cookie, renewed from the rotating refresh cookie at /api/auth/refresh.
+// There is no external auth service.
 type Auth struct {
-	validateURL string
-	refreshURL  string
-	devUser     string
-	client      *http.Client
+	svc    *service.Auth
+	secure bool
 }
 
-func NewAuth(validateURL, refreshURL, devUser string) *Auth {
-	return &Auth{validateURL: validateURL, refreshURL: refreshURL, devUser: devUser, client: &http.Client{Timeout: 10 * time.Second}}
+func NewAuth(svc *service.Auth, secure bool) *Auth {
+	return &Auth{svc: svc, secure: secure}
 }
 
-// Middleware gates protected routes: it 401s when there is no session (no valid
-// token and no dev fallback), so the SPA can redirect the browser to the login URL.
+// Middleware gates protected routes: it 401s when there is no valid access token,
+// which the SPA turns into a refresh-and-retry (and then a trip to /login).
 func (a *Auth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uid := a.ResolveWithRefresh(w, r)
+		uid := a.Resolve(r)
 		if uid == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -68,104 +80,76 @@ func (a *Auth) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// Resolve returns the external user id for the request, or "" if anonymous. Used
-// by the auth middleware (protected routes) and by the public session endpoint.
+// Resolve returns the user id carried by a valid access token, or "" if there is
+// none. Read-only and allocation-cheap: signature check, no database round-trip.
 func (a *Auth) Resolve(r *http.Request) string {
-	if tok := bearer(r); tok != "" && a.validateURL != "" {
-		if uid := a.validate(r.Context(), tok); uid != "" {
-			return uid
-		}
-	}
-	if a.devUser != "" {
-		// Local dev has no real session — honour a simulated logout (set by the
-		// logout handler) so the login/logout UX is testable without central auth.
-		if c, err := r.Cookie("dev_logout"); err == nil && c.Value == "1" {
-			return ""
-		}
-		return a.devUser
-	}
-	return ""
-}
-
-// ResolveWithRefresh is Resolve plus a transparent token refresh: if the access
-// token is missing/expired but a valid refresh_token cookie is present, it calls
-// the auth service's /refresh, relays the rotated cookies to the browser, and
-// validates the new access token — so the session renews without a re-login.
-func (a *Auth) ResolveWithRefresh(w http.ResponseWriter, r *http.Request) string {
-	if uid := a.Resolve(r); uid != "" {
-		return uid
-	}
-	access, setCookies := a.refresh(r)
-	if access == "" {
+	tok := bearer(r)
+	if tok == "" || strings.HasPrefix(tok, service.PATPrefix) {
 		return ""
 	}
-	for _, c := range setCookies {
-		w.Header().Add("Set-Cookie", c) // rotated access + refresh, on the shared domain
+	uid, err := a.svc.ParseAccess(tok)
+	if err != nil {
+		return ""
 	}
-	return a.validate(r.Context(), access)
+	return uid
 }
 
-// refresh POSTs the refresh_token cookie to the auth service and returns the new
-// access token plus the Set-Cookie headers to relay back to the browser.
-func (a *Auth) refresh(r *http.Request) (string, []string) {
-	if a.refreshURL == "" {
-		return "", nil
-	}
-	rc, err := r.Cookie("refresh_token")
-	if err != nil || rc.Value == "" {
-		return "", nil
-	}
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, a.refreshURL, nil)
+// SetSession writes both cookies: the short-lived access JWT and the rotating
+// refresh token.
+func (a *Auth) SetSession(w http.ResponseWriter, userID, refresh string) error {
+	access, err := a.svc.SignAccess(userID)
 	if err != nil {
-		return "", nil
+		return err
 	}
-	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: rc.Value})
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", nil
-	}
-	var out struct {
-		AccessToken string `json:"access_token"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
-		return "", nil
-	}
-	return out.AccessToken, resp.Header.Values("Set-Cookie")
+	http.SetCookie(w, &http.Cookie{
+		Name:     accessCookie,
+		Value:    access,
+		Path:     "/",
+		MaxAge:   int(a.svc.AccessTTL().Seconds()),
+		HttpOnly: true,
+		Secure:   a.secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     refreshCookie,
+		Value:    refresh,
+		Path:     refreshPath,
+		MaxAge:   int(a.svc.RefreshTTL().Seconds()),
+		HttpOnly: true,
+		Secure:   a.secure,
+		SameSite: http.SameSiteLaxMode,
+	})
+	return nil
 }
 
+// ClearSession expires both cookies. The paths must match the ones they were set
+// with, or the browser keeps the originals.
+func (a *Auth) ClearSession(w http.ResponseWriter) {
+	for _, c := range []struct{ name, path string }{
+		{accessCookie, "/"},
+		{refreshCookie, refreshPath},
+	} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     c.name,
+			Value:    "",
+			Path:     c.path,
+			MaxAge:   -1,
+			Expires:  time.Unix(0, 0),
+			HttpOnly: true,
+			Secure:   a.secure,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+}
+
+// bearer pulls the session token from the cookie, or from an Authorization header
+// (which is also how a PAT arrives — the caller distinguishes them by prefix).
 func bearer(r *http.Request) string {
-	if c, err := r.Cookie("access_token"); err == nil && c.Value != "" {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	}
+	if c, err := r.Cookie(accessCookie); err == nil && c.Value != "" {
 		return c.Value
 	}
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimPrefix(h, "Bearer ")
-	}
 	return ""
-}
-
-func (a *Auth) validate(ctx context.Context, token string) string {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.validateURL, nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return ""
-	}
-	var out struct {
-		UserID string `json:"user_id"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
-		return ""
-	}
-	return out.UserID
 }

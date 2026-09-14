@@ -14,3 +14,19 @@ UPDATE profiles
 SET name = $2, kcal = $3, carb = $4, protein = $5, fat = $6, shared = $7, onboarded = true, updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- Unclaimed profiles are pre-cutover rows: they still carry the external SSO id
+-- in legacy_user_id but no local user. `cmd/claim` lists and attaches them.
+
+-- name: ListUnclaimedProfiles :many
+SELECT * FROM profiles
+WHERE user_id IS NULL AND legacy_user_id IS NOT NULL
+ORDER BY created_at;
+
+-- name: ClaimProfile :one
+UPDATE profiles SET user_id = $2, updated_at = now()
+WHERE id = $1 AND user_id IS NULL
+RETURNING *;
+
+-- name: DeleteProfile :exec
+DELETE FROM profiles WHERE id = $1;

@@ -6,17 +6,17 @@ import (
 	"github.com/Meizuno/calories/internal/store/db"
 )
 
-// Profiles maps an external (SSO) user to a local profile and manages it.
-// Everything else in the app hangs off the profile id.
+// Profiles maps a local user (users.id) to a profile and manages it. Everything
+// else in the app hangs off the profile id.
 type Profiles struct {
 	q *db.Queries
 }
 
 func NewProfiles(q *db.Queries) *Profiles { return &Profiles{q: q} }
 
-// Ensure returns the profile for the external user, creating it on first sight.
+// Ensure returns the profile for the user, creating it on first sight.
 func (p *Profiles) Ensure(ctx context.Context, userID string) (db.Profile, error) {
-	return p.q.EnsureProfile(ctx, userID)
+	return p.q.EnsureProfile(ctx, &userID)
 }
 
 func (p *Profiles) Get(ctx context.Context, profileID int64) (db.Profile, error) {
@@ -39,4 +39,22 @@ func (p *Profiles) Save(ctx context.Context, profileID int64, name string, kcal,
 		Fat:     fat,
 		Shared:  shared,
 	})
+}
+
+// Unclaimed lists profiles left over from the external-SSO era: they still hold
+// the old auth-service id in legacy_user_id but no local user. See cmd/claim.
+func (p *Profiles) Unclaimed(ctx context.Context) ([]db.Profile, error) {
+	return p.q.ListUnclaimedProfiles(ctx)
+}
+
+// Claim attaches an orphaned legacy profile to a local user, handing over its
+// whole diary. The profile the user got on signup is deleted first, since a user
+// may own only one.
+func (p *Profiles) Claim(ctx context.Context, profileID int64, userID string) (db.Profile, error) {
+	if existing, err := p.q.EnsureProfile(ctx, &userID); err == nil && existing.ID != profileID {
+		if err := p.q.DeleteProfile(ctx, existing.ID); err != nil {
+			return db.Profile{}, err
+		}
+	}
+	return p.q.ClaimProfile(ctx, db.ClaimProfileParams{ID: profileID, UserID: &userID})
 }

@@ -9,13 +9,54 @@ import (
 	"context"
 )
 
+const claimProfile = `-- name: ClaimProfile :one
+UPDATE profiles SET user_id = $2, updated_at = now()
+WHERE id = $1 AND user_id IS NULL
+RETURNING id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id
+`
+
+type ClaimProfileParams struct {
+	ID     int64
+	UserID *string
+}
+
+func (q *Queries) ClaimProfile(ctx context.Context, arg ClaimProfileParams) (Profile, error) {
+	row := q.db.QueryRow(ctx, claimProfile, arg.ID, arg.UserID)
+	var i Profile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.PublicID,
+		&i.Name,
+		&i.Kcal,
+		&i.Carb,
+		&i.Protein,
+		&i.Fat,
+		&i.Shared,
+		&i.Onboarded,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LegacyUserID,
+	)
+	return i, err
+}
+
+const deleteProfile = `-- name: DeleteProfile :exec
+DELETE FROM profiles WHERE id = $1
+`
+
+func (q *Queries) DeleteProfile(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, deleteProfile, id)
+	return err
+}
+
 const ensureProfile = `-- name: EnsureProfile :one
 INSERT INTO profiles (user_id) VALUES ($1)
 ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
-RETURNING id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at
+RETURNING id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id
 `
 
-func (q *Queries) EnsureProfile(ctx context.Context, userID string) (Profile, error) {
+func (q *Queries) EnsureProfile(ctx context.Context, userID *string) (Profile, error) {
 	row := q.db.QueryRow(ctx, ensureProfile, userID)
 	var i Profile
 	err := row.Scan(
@@ -31,12 +72,13 @@ func (q *Queries) EnsureProfile(ctx context.Context, userID string) (Profile, er
 		&i.Onboarded,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LegacyUserID,
 	)
 	return i, err
 }
 
 const getProfile = `-- name: GetProfile :one
-SELECT id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at FROM profiles WHERE id = $1
+SELECT id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id FROM profiles WHERE id = $1
 `
 
 func (q *Queries) GetProfile(ctx context.Context, id int64) (Profile, error) {
@@ -55,12 +97,13 @@ func (q *Queries) GetProfile(ctx context.Context, id int64) (Profile, error) {
 		&i.Onboarded,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LegacyUserID,
 	)
 	return i, err
 }
 
 const getSharedProfile = `-- name: GetSharedProfile :one
-SELECT id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at FROM profiles WHERE public_id = $1 AND shared = true
+SELECT id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id FROM profiles WHERE public_id = $1 AND shared = true
 `
 
 func (q *Queries) GetSharedProfile(ctx context.Context, publicID string) (Profile, error) {
@@ -79,15 +122,59 @@ func (q *Queries) GetSharedProfile(ctx context.Context, publicID string) (Profil
 		&i.Onboarded,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LegacyUserID,
 	)
 	return i, err
+}
+
+const listUnclaimedProfiles = `-- name: ListUnclaimedProfiles :many
+
+SELECT id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id FROM profiles
+WHERE user_id IS NULL AND legacy_user_id IS NOT NULL
+ORDER BY created_at
+`
+
+// Unclaimed profiles are pre-cutover rows: they still carry the external SSO id
+// in legacy_user_id but no local user. `cmd/claim` lists and attaches them.
+func (q *Queries) ListUnclaimedProfiles(ctx context.Context) ([]Profile, error) {
+	rows, err := q.db.Query(ctx, listUnclaimedProfiles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Profile
+	for rows.Next() {
+		var i Profile
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.PublicID,
+			&i.Name,
+			&i.Kcal,
+			&i.Carb,
+			&i.Protein,
+			&i.Fat,
+			&i.Shared,
+			&i.Onboarded,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LegacyUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateProfile = `-- name: UpdateProfile :one
 UPDATE profiles
 SET name = $2, kcal = $3, carb = $4, protein = $5, fat = $6, shared = $7, onboarded = true, updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at
+RETURNING id, user_id, public_id, name, kcal, carb, protein, fat, shared, onboarded, created_at, updated_at, legacy_user_id
 `
 
 type UpdateProfileParams struct {
@@ -124,6 +211,7 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) (P
 		&i.Onboarded,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LegacyUserID,
 	)
 	return i, err
 }

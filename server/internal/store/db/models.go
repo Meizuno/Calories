@@ -39,6 +39,14 @@ type Food struct {
 	UpdatedAt   time.Time
 }
 
+type Identity struct {
+	ID             int64
+	UserID         string
+	Provider       string
+	ProviderUserID string
+	CreatedAt      time.Time
+}
+
 type Meal struct {
 	ID        int64
 	ProfileID int64
@@ -61,16 +69,39 @@ type PersonalAccessToken struct {
 }
 
 type Profile struct {
+	ID           int64
+	UserID       *string
+	PublicID     string
+	Name         string
+	Kcal         float64
+	Carb         float64
+	Protein      float64
+	Fat          float64
+	Shared       bool
+	Onboarded    bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	LegacyUserID *string
+}
+
+type RefreshToken struct {
 	ID        int64
 	UserID    string
-	PublicID  string
-	Name      string
-	Kcal      float64
-	Carb      float64
-	Protein   float64
-	Fat       float64
-	Shared    bool
-	Onboarded bool
+	TokenHash string
+	Family    string
+	UserAgent string
+	ExpiresAt time.Time
 	CreatedAt time.Time
-	UpdatedAt time.Time
+	UsedAt    pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
+}
+
+type User struct {
+	ID           string
+	Email        string
+	EmailNorm    string
+	PasswordHash *string
+	Name         string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }

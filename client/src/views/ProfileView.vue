@@ -2,13 +2,39 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { api } from "../lib/api";
-import { session, loadSession } from "../lib/session";
+import { session, loadSession, changePassword } from "../lib/session";
+import { ApiError } from "../lib/http";
 import type { Profile } from "../lib/types";
 
 const router = useRouter();
 const profile = ref<Profile | null>(null);
 const form = ref({ name: "", kcal: "0", carb: "0", protein: "0", fat: "0", shared: false });
 const saving = ref(false);
+
+// Account section: an account created through Google has no password yet, so it
+// only needs the new one; changing an existing password requires the current.
+const pw = ref({ current: "", next: "" });
+const pwBusy = ref(false);
+const pwError = ref("");
+const pwDone = ref(false);
+const hasPassword = computed(() => session.user?.hasPassword ?? true);
+const googleLinked = computed(() => session.user?.providers.includes("google") ?? false);
+
+async function savePassword() {
+  if (pwBusy.value || !pw.value.next) return;
+  pwError.value = "";
+  pwDone.value = false;
+  pwBusy.value = true;
+  try {
+    await changePassword(pw.value.current, pw.value.next);
+    pw.value = { current: "", next: "" };
+    pwDone.value = true;
+  } catch (e) {
+    pwError.value = e instanceof ApiError ? e.message : "Heslo se nepodařilo změnit.";
+  } finally {
+    pwBusy.value = false;
+  }
+}
 
 const isOnboarding = computed(() => profile.value !== null && !profile.value.onboarded);
 const shareUrl = computed(() =>
@@ -107,6 +133,42 @@ async function copyShare() {
           <UButton type="submit" :loading="saving" :label="isOnboarding ? 'Pokračovat' : 'Uložit'" />
         </div>
       </form>
+    </UCard>
+
+    <!-- Account & sign-in. Hidden during onboarding so the first run stays to
+         one task: the goal. -->
+    <UCard v-if="!isOnboarding && session.user">
+      <div class="space-y-4">
+        <div>
+          <h2 class="text-sm font-medium">Účet</h2>
+          <p class="text-xs text-gray-500">
+            {{ session.user.email }}
+            <span v-if="googleLinked"> · propojeno s Google</span>
+          </p>
+        </div>
+
+        <form class="space-y-3" @submit.prevent="savePassword">
+          <p v-if="pwError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
+            {{ pwError }}
+          </p>
+          <p v-else-if="pwDone" class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+            Heslo bylo změněno. Ostatní zařízení byla odhlášena.
+          </p>
+
+          <label v-if="hasPassword" class="block">
+            <span class="mb-1 block text-xs text-gray-500">Současné heslo</span>
+            <UInput v-model="pw.current" type="password" autocomplete="current-password" />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-xs text-gray-500">{{ hasPassword ? "Nové heslo" : "Nastavit heslo" }}</span>
+            <UInput v-model="pw.next" type="password" autocomplete="new-password" placeholder="Alespoň 8 znaků" />
+          </label>
+
+          <div class="flex justify-end">
+            <UButton type="submit" color="neutral" variant="soft" :loading="pwBusy" :label="hasPassword ? 'Změnit heslo' : 'Nastavit heslo'" />
+          </div>
+        </form>
+      </div>
     </UCard>
   </div>
 

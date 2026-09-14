@@ -24,10 +24,21 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		// Public — no session required.
 		//   /session         bootstraps the SPA (authenticated? profile?)
+		//   /auth/*          sign-up, sign-in, refresh, sign-out
 		//   /shared/{uuid}   read-only view of a profile that opted into sharing
 		r.Get("/session", h.Session)
-		r.Get("/login", h.Login)
-		r.Post("/logout", h.Logout)
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", h.Register)
+			r.Post("/login", h.LoginPassword)
+			// Rotates the session. The only route the refresh cookie is scoped to,
+			// along with /logout below.
+			r.Post("/refresh", h.Refresh)
+			r.Post("/logout", h.Logout)
+			// Google sign-in is two top-level navigations: out to the consent
+			// screen, back to the callback. Never fetched.
+			r.Get("/google", h.GoogleStart)
+			r.Get("/google/callback", h.GoogleCallback)
+		})
 		r.Get("/shared/{uuid}", h.SharedProfile)
 		r.Get("/shared/{uuid}/day", h.SharedDay)
 		r.Get("/shared/{uuid}/stats", h.SharedStats)
@@ -43,6 +54,7 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 			// Account & token management — full session only.
 			r.With(gate.Scope("")).Get("/profile", h.GetMyProfile)
 			r.With(gate.Scope("")).Put("/profile", h.SaveProfile)
+			r.With(gate.Scope("")).Post("/auth/password", h.ChangePassword)
 			r.With(gate.Scope("")).Get("/pats", h.ListPats)
 			r.With(gate.Scope("")).Post("/pats", h.CreatePat)
 			r.With(gate.Scope("")).Delete("/pats/{id}", h.RevokePat)

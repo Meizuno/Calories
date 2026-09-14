@@ -41,8 +41,9 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 			}
 		}
 
-		// Otherwise a full session (cookie access token, refreshed if stale).
-		uid := g.auth.ResolveWithRefresh(w, r)
+		// Otherwise a full session (the access JWT from the cookie). A stale token
+		// is a 401; the SPA then calls /api/auth/refresh and retries.
+		uid := g.auth.Resolve(r)
 		if uid == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
