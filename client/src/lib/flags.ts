@@ -1,4 +1,8 @@
 import { addCollection } from "@iconify/vue";
+import { svgBody } from "./svg";
+
+import cs from "../assets/flags/cs.svg?raw";
+import en from "../assets/flags/en.svg?raw";
 
 // Nuxt UI resolves `i-<collection>-<name>` icons through Iconify, which by
 // default fetches them from api.iconify.design at runtime. The two flags in the
@@ -6,35 +10,22 @@ import { addCollection } from "@iconify/vue";
 // no CDN round-trip, nothing to fail offline, and they paint on first render
 // rather than popping in once a request returns.
 //
+// The artwork lives in ../assets/flags as real .svg files and is inlined here by
+// Vite's `?raw`, which keeps that property — `public/` would mean fetching them.
+//
 // The prefix is one word on purpose. Nuxt UI strips the leading `i-` and hands
 // the rest to Iconify, which splits on the FIRST hyphen — so `i-circle-flags-cz`
 // would be read as collection "circle", icon "flags-cz", and never resolve.
 //
-// Bodies copied from the `circle-flags` collection (CC0). The mask ids are the
-// one edit: upstream ships both with the same id, which would collide when the
-// dropdown renders both flags at once.
+// Artwork from the `circle-flags` collection (CC0). The mask ids are the one
+// edit: upstream ships both with the same id, which would collide when two flags
+// render at once.
 addCollection({
   prefix: "locale",
   width: 512,
   height: 512,
   icons: {
-    cs: {
-      body:
-        '<mask id="flagCz"><circle cx="256" cy="256" r="256" fill="#fff"/></mask>' +
-        '<g mask="url(#flagCz)">' +
-        '<path fill="#eee" d="M0 0h512v256l-265 45.2z"/>' +
-        '<path fill="#d80027" d="M210 256h302v256H0z"/>' +
-        '<path fill="#0052b4" d="M0 0v512l256-256z"/>' +
-        "</g>",
-    },
-    en: {
-      body:
-        '<mask id="flagGb"><circle cx="256" cy="256" r="256" fill="#fff"/></mask>' +
-        '<g mask="url(#flagGb)">' +
-        '<path fill="#eee" d="m0 0l8 22l-8 23v23l32 54l-32 54v32l32 48l-32 48v32l32 54l-32 54v68l22-8l23 8h23l54-32l54 32h32l48-32l48 32h32l54-32l54 32h68l-8-22l8-23v-23l-32-54l32-54v-32l-32-48l32-48v-32l-32-54l32-54V0l-22 8l-23-8h-23l-54 32l-54-32h-32l-48 32l-48-32h-32l-54 32L68 0z"/>' +
-        '<path fill="#0052b4" d="M336 0v108L444 0Zm176 68L404 176h108zM0 176h108L0 68ZM68 0l108 108V0Zm108 512V404L68 512ZM0 444l108-108H0Zm512-108H404l108 108Zm-68 176L336 404v108z"/>' +
-        '<path fill="#d80027" d="M0 0v45l131 131h45zm208 0v208H0v96h208v208h96V304h208v-96H304V0zm259 0L336 131v45L512 0zM176 336L0 512h45l131-131zm160 0l176 176v-45L381 336z"/>' +
-        "</g>",
-    },
+    cs: { body: svgBody(cs) },
+    en: { body: svgBody(en) },
   },
 });

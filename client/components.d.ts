@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     DaySummary: typeof import('./src/components/DaySummary.vue')['default']
+    LocaleToggle: typeof import('./src/components/LocaleToggle.vue')['default']
     MacroBars: typeof import('./src/components/MacroBars.vue')['default']
     MealTable: typeof import('./src/components/MealTable.vue')['default']
     PeriodChart: typeof import('./src/components/PeriodChart.vue')['default']

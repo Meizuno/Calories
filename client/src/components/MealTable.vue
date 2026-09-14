@@ -3,6 +3,9 @@ import { ref } from "vue";
 import type { Meal, Entry } from "../lib/types";
 import { t } from "../lib/i18n";
 import { useReveal } from "../composables/useAnimatedNumber";
+import { useUiSize } from "../composables/useUiSize";
+
+const { compact, inline } = useUiSize();
 
 const props = defineProps<{ meal: Meal; editable?: boolean; showNote?: boolean }>();
 const emit = defineEmits<{
@@ -92,23 +95,23 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
     >
       <!-- edit form -->
       <div v-if="editing(e.id)" class="space-y-2">
-        <UInput v-model="draft.name" size="sm" class="w-full" :placeholder="t('diary.entryNamePlaceholder')" />
+        <UInput v-model="draft.name" :size="compact" class="w-full" :placeholder="t('diary.entryNamePlaceholder')" />
         <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <label class="text-xs text-gray-500">
             {{ t("common.quantity") }}
             <div class="mt-0.5 flex gap-1">
-              <UInput v-model="draft.quantity" type="number" step="any" min="0" size="sm" class="min-w-0 flex-1" />
-              <USelect v-model="draft.unit" :items="units" size="sm" class="w-20 min-w-0" />
+              <UInput v-model="draft.quantity" type="number" step="any" min="0" :size="compact" class="min-w-0 flex-1" />
+              <USelect v-model="draft.unit" :items="units" :size="compact" class="w-20 min-w-0" />
             </div>
           </label>
-          <label class="text-xs text-gray-500">kcal<UInput v-model="draft.kcal" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-sky-400">{{ t("macros.carbShort") }}.<UInput v-model="draft.carb" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-emerald-400">{{ t("macros.proteinShort") }}.<UInput v-model="draft.protein" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
-          <label class="text-xs text-amber-400">{{ t("macros.fatShort") }}<UInput v-model="draft.fat" type="number" step="any" min="0" size="sm" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-gray-500">kcal<UInput v-model="draft.kcal" type="number" step="any" min="0" :size="compact" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-sky-400">{{ t("macros.carbShort") }}.<UInput v-model="draft.carb" type="number" step="any" min="0" :size="compact" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-emerald-400">{{ t("macros.proteinShort") }}.<UInput v-model="draft.protein" type="number" step="any" min="0" :size="compact" class="mt-0.5 w-full" /></label>
+          <label class="text-xs text-amber-400">{{ t("macros.fatShort") }}<UInput v-model="draft.fat" type="number" step="any" min="0" :size="compact" class="mt-0.5 w-full" /></label>
         </div>
         <div class="flex justify-end gap-2">
-          <UButton size="xs" :label="t('common.save')" @click="save(e.id)" />
-          <UButton size="xs" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancel" />
+          <UButton :size="inline" :label="t('common.save')" @click="save(e.id)" />
+          <UButton :size="inline" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancel" />
         </div>
       </div>
 
@@ -134,8 +137,8 @@ function ringStyle(e: { carb: number; protein: number; fat: number }) {
             <span><span class="text-gray-500">{{ t("macros.fatShort") }}</span> <b class="text-amber-600 dark:text-amber-400">{{ g(e.fat) }} g</b></span>
           </div>
           <div v-if="editable" class="-mr-1 flex shrink-0">
-            <UButton size="xs" color="neutral" variant="ghost" label="✎" class="size-7 justify-center p-0" @click="startEdit(e)" />
-            <UButton size="xs" color="error" variant="ghost" label="✕" class="size-7 justify-center p-0" @click="emit('delete-entry', e.id)" />
+            <UButton :size="inline" color="neutral" variant="ghost" label="✎" class="size-7 justify-center p-0 sm:size-8" @click="startEdit(e)" />
+            <UButton :size="inline" color="error" variant="ghost" label="✕" class="size-7 justify-center p-0 sm:size-8" @click="emit('delete-entry', e.id)" />
           </div>
         </div>
       </template>

@@ -7,8 +7,10 @@ import DaySummary from "../components/DaySummary.vue";
 import MealTable from "../components/MealTable.vue";
 import StatsPanel from "../components/StatsPanel.vue";
 import { t, weekdayShort } from "../lib/i18n";
+import { useUiSize } from "../composables/useUiSize";
 
 const route = useRoute();
+const { control, compact } = useUiSize();
 const uuid = computed(() => route.params.uuid as string);
 
 const profile = ref<Profile | null>(null);
@@ -17,6 +19,13 @@ const error = ref(false);
 
 // Which view is showing: the per-day meal tables or the period statistics.
 const tab = ref<"diary" | "stats">("diary");
+
+// Drilling into a day from the chart switches to this profile's own diary for
+// that date — the public view has no app-wide diary to send anyone to.
+function openDay(d: string) {
+  date.value = d;
+  tab.value = "diary";
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const todayISO = () => {
@@ -61,19 +70,19 @@ const k = (n: number) => Math.round(n);
 
     <!-- switch between the per-day tables and the period statistics -->
     <div class="flex gap-1.5">
-      <UButton size="sm" :color="tab === 'diary' ? 'primary' : 'neutral'" :variant="tab === 'diary' ? 'solid' : 'soft'" :label="t('shared.diary')" @click="tab = 'diary'" />
-      <UButton size="sm" :color="tab === 'stats' ? 'primary' : 'neutral'" :variant="tab === 'stats' ? 'solid' : 'soft'" :label="t('shared.stats')" @click="tab = 'stats'" />
+      <UButton :size="compact" :color="tab === 'diary' ? 'primary' : 'neutral'" :variant="tab === 'diary' ? 'solid' : 'soft'" :label="t('shared.diary')" @click="tab = 'diary'" />
+      <UButton :size="compact" :color="tab === 'stats' ? 'primary' : 'neutral'" :variant="tab === 'stats' ? 'solid' : 'soft'" :label="t('shared.stats')" @click="tab = 'stats'" />
     </div>
 
     <!-- Diary: per-day meal tables with day navigation -->
     <template v-if="tab === 'diary'">
       <div v-if="day" class="space-y-5">
         <div class="flex items-center justify-between">
-          <UButton color="neutral" variant="soft" label="←" @click="goto(shiftDate(date, -1))" />
+          <UButton color="neutral" variant="soft" :size="control" label="←" @click="goto(shiftDate(date, -1))" />
           <div class="text-base font-semibold tabular-nums sm:text-lg">
             {{ date }} <span class="text-gray-400">({{ weekday(date) }})</span>
           </div>
-          <UButton color="neutral" variant="soft" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
+          <UButton color="neutral" variant="soft" :size="control" label="→" :disabled="isToday" @click="goto(shiftDate(date, 1))" />
         </div>
 
         <DaySummary :day="day" />
@@ -99,6 +108,7 @@ const k = (n: number) => Math.round(n);
       v-else
       :key="uuid"
       :fetch-stats="(from, to) => api.getSharedStats(uuid, from, to)"
+      @pick-day="openDay"
       :fetch-days="() => api.getSharedDays(uuid)"
     />
   </div>

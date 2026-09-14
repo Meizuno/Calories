@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { api } from "../lib/api";
 import { t, weekdayShort } from "../lib/i18n";
 import { useAnimatedNumber, useReveal } from "../composables/useAnimatedNumber";
@@ -8,6 +9,7 @@ import type { Stats } from "../lib/types";
 // Seven days ending on the day being viewed, so browsing back through the diary
 // carries its own context rather than always showing the current week.
 const props = defineProps<{ date: string }>();
+const router = useRouter();
 
 const stats = ref<Stats | null>(null);
 const failed = ref(false);
@@ -77,6 +79,11 @@ const average = computed(() => {
 const animatedAverage = useAnimatedNumber(() => average.value);
 const shownAverage = computed(() => animatedAverage.value * reveal.value);
 const hasData = computed(() => days.value.some((d) => d.logged));
+
+// Hovering a day lifts its column, matching the statistics chart; clicking one
+// opens it in the diary, the same gesture the chart's day level uses.
+const hovered = ref<string | null>(null);
+const openDay = (iso: string) => router.push({ path: "/", query: { date: iso } });
 </script>
 
 <template>
@@ -103,18 +110,24 @@ const hasData = computed(() => days.value.some((d) => d.logged));
           class="pointer-events-none absolute inset-x-0 border-t border-dashed border-gray-300 dark:border-gray-600"
           :style="{ bottom: goalLine }"
         />
-        <div class="flex h-full items-end gap-1.5">
-          <div
+        <div class="flex h-full items-end gap-1" @pointerleave="hovered = null">
+          <button
             v-for="(d, i) in days"
             :key="d.iso"
-            class="flex h-full flex-1 items-end"
-            :title="d.logged ? `${d.label}: ${Math.round(d.kcal)} kcal` : d.label"
+            type="button"
+            class="group flex h-full flex-1 items-end rounded-md px-0.5 outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+            :class="hovered === d.iso ? 'bg-gray-900/5 dark:bg-white/5' : ''"
+            :aria-label="d.logged ? `${d.label}: ${Math.round(d.kcal)} kcal` : d.label"
+            @pointerenter="hovered = d.iso"
+            @focus="hovered = d.iso"
+            @blur="hovered = null"
+            @click="openDay(d.iso)"
           >
             <!-- min-height keeps a logged-but-tiny day visible rather than
                  indistinguishable from an empty one -->
             <div
               v-if="d.logged"
-              class="w-full rounded-t-sm"
+              class="w-full rounded-t-md"
               :class="[
                 d.kcal > goal ? 'bg-rose-400 dark:bg-rose-500' : 'bg-emerald-400 dark:bg-emerald-500',
                 d.current ? 'ring-2 ring-gray-900/70 dark:ring-white/70' : '',
@@ -126,16 +139,16 @@ const hasData = computed(() => days.value.some((d) => d.logged));
               class="h-1 w-full rounded-full bg-gray-200 dark:bg-gray-700"
               :class="d.current ? 'ring-2 ring-gray-900/70 dark:ring-white/70' : ''"
             />
-          </div>
+          </button>
         </div>
       </div>
 
-      <div class="mt-1.5 flex gap-1.5">
+      <div class="mt-1.5 flex gap-1">
         <span
           v-for="d in days"
           :key="d.iso"
-          class="flex-1 truncate text-center text-[10px]"
-          :class="d.current ? 'font-semibold text-gray-700 dark:text-gray-200' : 'text-gray-400'"
+          class="flex-1 truncate text-center text-[10px] transition-colors"
+          :class="hovered === d.iso || d.current ? 'font-semibold text-gray-700 dark:text-gray-200' : 'text-gray-400'"
         >{{ d.label }}</span>
       </div>
 

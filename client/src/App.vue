@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView, useRouter } from "vue-router";
+import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { session, logout } from "./lib/session";
-import { t, currentLocale, setLocale, LOCALE_NAMES, LOCALE_FLAGS, type Locale } from "./lib/i18n";
+import { t, currentLocale } from "./lib/i18n";
 import { cs as uiCs, en as uiEn } from "@nuxt/ui/locale";
 import { usePullToRefresh } from "./composables/usePullToRefresh";
+import LocaleToggle from "./components/LocaleToggle.vue";
 
 const router = useRouter();
+const route = useRoute();
+// Sign-in and sign-up render on a bare shell: no nav, no profile, no sign-out,
+// because none of it is reachable yet. Only the language toggle survives — it
+// is the one control that still matters before you are signed in.
+const isAuthPage = computed(() => route.path === "/login");
 const profileName = computed(() => session.profile?.name?.trim() || "");
 const initial = computed(() => (profileName.value ? profileName.value.charAt(0).toUpperCase() : "🙂"));
 
@@ -18,8 +24,6 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
 // Hand Nuxt UI the matching locale so its own components (the calendar, menus)
 // speak the same language as our strings.
 const uiLocale = computed(() => (currentLocale() === "cs" ? uiCs : uiEn));
-// The switcher shows the language currently in use (flag + code); clicking it
-// moves to the next one. With two locales that is a plain toggle.
 // Primary destinations. Icon paths are inline so they render without the
 // Iconify CDN round-trip, the same reasoning as the locale flags.
 const navItems = computed(() => [
@@ -35,16 +39,18 @@ const navItems = computed(() => [
   },
 ]);
 
-const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
-const activeLocale = computed(() => currentLocale());
-function cycleLocale() {
-  const next = LOCALES[(LOCALES.indexOf(activeLocale.value) + 1) % LOCALES.length];
-  setLocale(next);
-}
 </script>
 
 <template>
   <UApp :locale="uiLocale">
+    <!-- Bare shell for sign-in / sign-up: the card sits in the middle of the
+         viewport with nothing around it. The language switcher lives inside the
+         card itself, so there is no floating chrome left to place. -->
+    <div v-if="isAuthPage" class="grid min-h-dvh place-items-center px-4 py-10">
+      <RouterView />
+    </div>
+
+    <template v-else>
     <header
       class="sticky top-0 z-30 border-b border-gray-200/60 bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/65 dark:border-gray-800/60 dark:bg-gray-950/80 dark:supports-[backdrop-filter]:bg-gray-950/65"
     >
@@ -82,16 +88,7 @@ function cycleLocale() {
 
           <!-- Account cluster, pushed to the far edge. -->
           <div class="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              class="flex size-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold uppercase tracking-wide text-gray-500 outline-none transition hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:w-auto sm:px-2.5 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-              :title="LOCALE_NAMES[activeLocale]"
-              :aria-label="t('nav.language')"
-              @click="cycleLocale"
-            >
-              <UIcon :name="LOCALE_FLAGS[activeLocale]" class="size-5 shrink-0" />
-              <span class="hidden sm:inline">{{ activeLocale }}</span>
-            </button>
+            <LocaleToggle />
 
             <RouterLink
               to="/profiles/me"
@@ -120,16 +117,7 @@ function cycleLocale() {
         </template>
 
         <div v-else class="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            class="flex size-9 items-center justify-center gap-1.5 rounded-xl text-xs font-semibold uppercase tracking-wide text-gray-500 outline-none transition hover:bg-gray-100 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:w-auto sm:px-2.5 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            :title="LOCALE_NAMES[activeLocale]"
-            :aria-label="t('nav.language')"
-            @click="cycleLocale"
-          >
-            <UIcon :name="LOCALE_FLAGS[activeLocale]" class="size-5 shrink-0" />
-            <span class="hidden sm:inline">{{ activeLocale }}</span>
-          </button>
+          <LocaleToggle />
 
           <button
             type="button"
@@ -171,5 +159,6 @@ function cycleLocale() {
     <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <RouterView />
     </main>
+    </template>
   </UApp>
 </template>

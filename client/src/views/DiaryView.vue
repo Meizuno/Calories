@@ -7,6 +7,7 @@ import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
 import WeekTrend from "../components/WeekTrend.vue";
 import { useMediaQuery } from "../composables/useMediaQuery";
+import { useUiSize } from "../composables/useUiSize";
 import MealTable from "../components/MealTable.vue";
 import { t, weekdayShort } from "../lib/i18n";
 
@@ -15,6 +16,7 @@ const router = useRouter();
 // xl is the point at which the summary becomes a sticky column with room to
 // spare beneath it; below that the trend has nowhere useful to live.
 const isWide = useMediaQuery("(min-width: 1280px)");
+const { control, compact, inline } = useUiSize();
 
 const pad = (n: number) => String(n).padStart(2, "0");
 // Local calendar date — not UTC, so "dnes" matches the user's actual day.
@@ -22,7 +24,13 @@ const todayISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
-const date = computed(() => (route.query.date as string) || todayISO());
+const date = computed(() => {
+  const raw = route.query.date;
+  const iso = typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : todayISO();
+  // goto() already refuses to step forward past today; this applies the same
+  // rule to a date arriving from outside — a link, a bookmark, a chart click.
+  return iso > todayISO() ? todayISO() : iso;
+});
 const isToday = computed(() => date.value === todayISO());
 
 function shiftDate(d: string, n: number) {
@@ -147,7 +155,7 @@ async function onUpdateEntry(
             <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
               <div class="flex min-w-0 items-center gap-0.5">
                 <UButton
-                  size="xs"
+                  :size="inline"
                   color="neutral"
                   variant="ghost"
                   icon="i-ui-prev"
@@ -158,7 +166,7 @@ async function onUpdateEntry(
                   {{ date }} <span class="font-normal text-gray-400">({{ weekday(date) }})</span>
                 </span>
                 <UButton
-                  size="xs"
+                  :size="inline"
                   color="neutral"
                   variant="ghost"
                   icon="i-ui-next"
@@ -170,7 +178,7 @@ async function onUpdateEntry(
 
               <div class="ml-auto flex items-center gap-1">
                 <UButton
-                  size="xs"
+                  :size="inline"
                   color="neutral"
                   variant="soft"
                   :label="t('common.today')"
@@ -179,7 +187,7 @@ async function onUpdateEntry(
                 />
                 <UPopover v-model:open="calOpen">
                   <UButton
-                    size="xs"
+                    :size="inline"
                     color="neutral"
                     variant="soft"
                     icon="i-ui-calendar"
@@ -209,13 +217,13 @@ async function onUpdateEntry(
       <div class="flex items-center gap-2">
         <UButton
           v-if="day.meals.length"
-          size="xs"
+          :size="inline"
           color="neutral"
           variant="soft"
           :label="allOpen ? t('diary.collapseAll') : t('diary.expandAll')"
           @click="toggleAll"
         />
-        <UButton size="xs" :label="t('diary.addEntry')" :to="{ path: '/log', query: { date } }" />
+        <UButton :size="inline" :label="t('diary.addEntry')" :to="{ path: '/log', query: { date } }" />
       </div>
     </div>
 
@@ -237,14 +245,14 @@ async function onUpdateEntry(
               class="cursor-pointer text-sm font-normal text-sky-500 hover:text-sky-600"
               @click.stop="startEditMeal(item.meal)"
               @keydown.enter.stop.prevent="startEditMeal(item.meal)"
-            >upravit</span>
+            >{{ t("common.edit") }}</span>
             <span
               role="button"
               tabindex="0"
               class="cursor-pointer text-sm font-normal text-red-500 hover:text-red-600"
               @click.stop="delMeal(item.meal.id)"
               @keydown.enter.stop.prevent="delMeal(item.meal.id)"
-            >smazat</span>
+            >{{ t("common.delete") }}</span>
           </span>
         </div>
       </template>
@@ -256,16 +264,16 @@ async function onUpdateEntry(
             <div class="flex items-center gap-2">
               <UInput
                 v-model="mealDraft"
-                size="sm"
+                :size="compact"
                 class="flex-1"
                 :placeholder="t('diary.mealNamePlaceholder')"
                 @keydown.enter.prevent="saveMeal(item.meal.id)"
                 @keydown.esc="cancelEdit"
               />
-              <UButton size="xs" :label="t('common.save')" @click="saveMeal(item.meal.id)" />
-              <UButton size="xs" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancelEdit" />
+              <UButton :size="inline" :label="t('common.save')" @click="saveMeal(item.meal.id)" />
+              <UButton :size="inline" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancelEdit" />
             </div>
-            <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" :placeholder="t('diary.notePlaceholder')" />
+            <UTextarea v-model="noteDraft" :rows="2" autoresize :size="compact" class="w-full" :placeholder="t('diary.notePlaceholder')" />
           </div>
           <MealTable
             editable
@@ -280,7 +288,7 @@ async function onUpdateEntry(
 
     <div v-else class="rounded-lg border border-dashed border-gray-200 p-8 text-center dark:border-gray-800">
           <p class="text-sm text-gray-500">{{ t("diary.noMeals") }}</p>
-          <UButton class="mt-3" size="sm" :label="t('diary.addMeal')" :to="{ path: '/log', query: { date } }" />
+          <UButton class="mt-3" :size="control" :label="t('diary.addMeal')" :to="{ path: '/log', query: { date } }" />
         </div>
       </div>
     </div>
