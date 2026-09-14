@@ -71,8 +71,8 @@ cd server && go run ./cmd/seed       # or: make seed
 
 `cmd/seed` creates `dev@example.com` / `devpassword` (override with
 `SEED_EMAIL`/`SEED_PASSWORD`) and fills its diary — sign in with those. It is a
-dev-only tool: the Docker image builds only `./cmd/server`, so neither it nor
-`cmd/claim` ships in production.
+dev-only tool: the Docker image builds only `./cmd/server`, so it never ships in
+production.
 
 ## Client
 
@@ -185,20 +185,12 @@ Deploy the single image as a `calories` service behind Traefik
 (`calories.<domain>`) with a `calories_user` Postgres role.
 
 ### Migrating off the old SSO
-Migration `000004` moves `profiles.user_id` from the external SSO id onto
-`users.id`. Those old ids carry no email and the auth service is gone, so nothing
-can resolve them automatically: each is preserved in `profiles.legacy_user_id` and
-its profile left unclaimed. Register the account in the app, then hand the diary
-over:
-
-```bash
-cd server
-go run ./cmd/claim                                    # list unclaimed profiles
-go run ./cmd/claim -profile 1 -email me@example.com   # hand profile 1 over
-```
-
-The empty profile the new account got at signup is deleted in the process, since a
-user owns exactly one.
+Done and removed. Migration `000004` moved `profiles.user_id` from the external
+SSO id onto `users.id`, parking the old ids in `legacy_user_id` so each diary
+could be reattached to a real account; `000005` drops that column now that the
+handover is complete and restores `user_id` to `NOT NULL`. It refuses to run
+while any profile is still unowned, rather than orphaning a diary. The one-shot
+`cmd/claim` tool that performed the handover is in the git history.
 
 ## Personal access tokens (server-only)
 Programmatic API access without a browser. A PAT is sent as

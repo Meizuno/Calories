@@ -69,19 +69,18 @@ type PersonalAccessToken struct {
 }
 
 type Profile struct {
-	ID           int64
-	UserID       *string
-	PublicID     string
-	Name         string
-	Kcal         float64
-	Carb         float64
-	Protein      float64
-	Fat          float64
-	Shared       bool
-	Onboarded    bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	LegacyUserID *string
+	ID        int64
+	UserID    string
+	PublicID  string
+	Name      string
+	Kcal      float64
+	Carb      float64
+	Protein   float64
+	Fat       float64
+	Shared    bool
+	Onboarded bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type RefreshToken struct {
