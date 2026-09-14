@@ -74,6 +74,28 @@ cd server && go run ./cmd/seed       # or: make seed
 dev-only tool: the Docker image builds only `./cmd/server`, so it never ships in
 production.
 
+## Tests
+
+```bash
+cd server
+make test        # unit tests only — no database, runs anywhere
+make test-db     # everything, including the database-backed auth tests
+```
+
+Most of the suite needs nothing: the access-token rules (expiry, foreign secret,
+`alg=none` forgery, wrong issuer, tampering), password and email validation,
+cookie attributes, the PAT-vs-session scope gate, the API error codes and the
+open-redirect guard on `?return=`.
+
+The parts that only exist against a real database — refresh rotation, replay
+detection, concurrent refresh, Google account linking — skip unless
+`TEST_DATABASE_URL` is set. Point it at a **throwaway** database: those tests
+truncate.
+
+```bash
+TEST_DATABASE_URL='postgres://user:pass@localhost:5432/calories_test?sslmode=disable' go test ./...
+```
+
 ## Client
 
 Vue 3 SPA (Nuxt UI). Routes: `/` welcome (public), `/login` sign-in & sign-up
