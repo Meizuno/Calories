@@ -472,7 +472,10 @@ func profileDTO(p db.Profile) profileResp {
 // account and profile. The SPA uses it to bootstrap (welcome vs app, onboarding)
 // and to learn which sign-in methods this deployment offers.
 func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
-	uid := h.auth.Resolve(r)
+	// Renews before answering: without this a page opened after the access token
+	// expired would report "not authenticated" and bounce a still-valid session
+	// to the sign-in screen.
+	uid := h.auth.ResolveWithRefresh(w, r)
 	if uid == "" {
 		writeJSON(w, map[string]any{
 			"authenticated": false,

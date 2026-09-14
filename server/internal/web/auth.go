@@ -23,11 +23,19 @@ const (
 const (
 	accessCookie  = "access_token"
 	refreshCookie = "refresh_token"
-	// The refresh cookie is confined to /api/auth, so it rides along only with
-	// refresh and logout instead of every API request. The access JWT is what
-	// authenticates normal traffic; when it expires the SPA calls
-	// POST /api/auth/refresh once and retries.
-	refreshPath = "/api/auth"
+	// The refresh cookie reaches the whole API, because the server renews the
+	// session itself: a request arriving with an expired access token but a good
+	// refresh cookie is rotated in place (ResolveWithRefresh) instead of being
+	// bounced with a 401. That only works if the browser sends the cookie to the
+	// route being called.
+	//
+	// The trade-off is deliberate: a long-lived credential now rides with every
+	// API request rather than two routes. It stays HttpOnly, Secure in
+	// production, SameSite=Lax and same-origin, and every use rotates it.
+	refreshPath = "/api"
+	// Where the refresh cookie used to live. Logout clears this path too, so a
+	// browser holding a pre-change cookie is not left with a stray one.
+	legacyRefreshPath = "/api/auth"
 )
 
 // UserID returns the authenticated local user id placed in the context by Auth.
@@ -66,11 +74,11 @@ func NewAuth(svc *service.Auth, secure bool) *Auth {
 	return &Auth{svc: svc, secure: secure}
 }
 
-// Middleware gates protected routes: it 401s when there is no valid access token,
-// which the SPA turns into a refresh-and-retry (and then a trip to /login).
+// Middleware gates protected routes. An expired access token is renewed in
+// place rather than rejected, so a 401 now means the session is genuinely over.
 func (a *Auth) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		uid := a.Resolve(r)
+		uid := a.ResolveWithRefresh(w, r)
 		if uid == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
@@ -78,6 +86,33 @@ func (a *Auth) Middleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), userIDKey, uid)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// ResolveWithRefresh is Resolve plus automatic renewal: when the access token is
+// missing or expired but the refresh cookie is still good, it rotates the pair
+// and sets the new cookies, so the caller never sees the expiry.
+//
+// Rotation is a write, so this must only be used where a Set-Cookie can still
+// be emitted — never after the response has started.
+func (a *Auth) ResolveWithRefresh(w http.ResponseWriter, r *http.Request) string {
+	if uid := a.Resolve(r); uid != "" {
+		return uid
+	}
+	rc, err := r.Cookie(refreshCookie)
+	if err != nil || rc.Value == "" {
+		return ""
+	}
+	user, next, err := a.svc.Rotate(r.Context(), rc.Value, r.UserAgent())
+	if err != nil {
+		// Expired, revoked or replayed — drop the dead cookies so the browser
+		// stops presenting them on every subsequent request.
+		a.ClearSession(w)
+		return ""
+	}
+	if err := a.SetSession(w, user.ID, next); err != nil {
+		return ""
+	}
+	return user.ID
 }
 
 // Resolve returns the user id carried by a valid access token, or "" if there is
@@ -128,6 +163,7 @@ func (a *Auth) ClearSession(w http.ResponseWriter) {
 	for _, c := range []struct{ name, path string }{
 		{accessCookie, "/"},
 		{refreshCookie, refreshPath},
+		{refreshCookie, legacyRefreshPath},
 	} {
 		http.SetCookie(w, &http.Cookie{
 			Name:     c.name,

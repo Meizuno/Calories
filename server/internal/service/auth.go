@@ -47,6 +47,17 @@ const (
 	minPasswordChars = 8
 )
 
+// ReuseGrace is how long a just-rotated refresh token keeps working.
+//
+// The server rotates on whichever request arrives first, and a page load fires
+// several at once — all still carrying the same cookie, because the browser has
+// not seen the new one yet. Without this window the second request would look
+// like a replay and sign the user out for simply loading a page.
+//
+// The cost is bounded and deliberate: a genuinely stolen token also works
+// inside this window. Outside it, reuse still burns the whole family.
+const ReuseGrace = 20 * time.Second
+
 func NewAuth(q *db.Queries, secret string, accessTTL, refreshTTL time.Duration) *Auth {
 	return &Auth{q: q, secret: []byte(secret), accessTTL: accessTTL, refreshTTL: refreshTTL}
 }
@@ -222,25 +233,60 @@ func (a *Auth) IssueRefresh(ctx context.Context, userID, family, userAgent strin
 // cannot both succeed. A token presented twice means it leaked: the whole family
 // is revoked, logging the attacker and the victim out together.
 func (a *Auth) Rotate(ctx context.Context, raw, userAgent string) (db.User, string, error) {
-	rt, err := a.q.GetRefreshToken(ctx, hashToken(raw))
+	hash := hashToken(raw)
+	rt, err := a.q.GetRefreshToken(ctx, hash)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return db.User{}, "", ErrInvalidToken
 	}
 	if err != nil {
 		return db.User{}, "", err
 	}
-	if rt.UsedAt.Valid {
-		// Replay of an already-rotated token — burn the chain.
-		_ = a.q.RevokeRefreshFamily(ctx, rt.Family)
+	// Revoked or expired is dead regardless of anything below — checked first so
+	// the grace window can never resurrect a signed-out session.
+	if rt.RevokedAt.Valid || time.Now().After(rt.ExpiresAt) {
 		return db.User{}, "", ErrInvalidToken
 	}
+
+	if rt.UsedAt.Valid {
+		if time.Since(rt.UsedAt.Time) > ReuseGrace {
+			// A genuine replay — burn the chain.
+			_ = a.q.RevokeRefreshFamily(ctx, rt.Family)
+			return db.User{}, "", ErrInvalidToken
+		}
+		return a.reissue(ctx, rt, userAgent)
+	}
+
 	n, err := a.q.UseRefreshToken(ctx, rt.ID)
 	if err != nil {
 		return db.User{}, "", err
 	}
-	if n == 0 { // expired, revoked, or lost the race to a concurrent refresh
+	if n == 0 {
+		// Something changed between the read and the update. Re-read to find out
+		// what: a sibling request winning the race is benign, revocation is not.
+		return a.afterLostRace(ctx, hash, userAgent)
+	}
+	return a.reissue(ctx, rt, userAgent)
+}
+
+// afterLostRace decides whether losing the rotation race was a concurrent
+// refresh (fine — hand out a sibling) or a revocation that landed in between
+// (not fine — the session is over).
+func (a *Auth) afterLostRace(ctx context.Context, hash, userAgent string) (db.User, string, error) {
+	rt, err := a.q.GetRefreshToken(ctx, hash)
+	if err != nil {
 		return db.User{}, "", ErrInvalidToken
 	}
+	if rt.RevokedAt.Valid || time.Now().After(rt.ExpiresAt) {
+		return db.User{}, "", ErrInvalidToken
+	}
+	if rt.UsedAt.Valid && time.Since(rt.UsedAt.Time) <= ReuseGrace {
+		return a.reissue(ctx, rt, userAgent)
+	}
+	return db.User{}, "", ErrInvalidToken
+}
+
+// reissue mints the next token in an existing rotation chain.
+func (a *Auth) reissue(ctx context.Context, rt db.RefreshToken, userAgent string) (db.User, string, error) {
 	u, err := a.q.GetUser(ctx, rt.UserID)
 	if err != nil {
 		return db.User{}, "", err

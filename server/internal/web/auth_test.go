@@ -114,8 +114,9 @@ func TestSetSessionCookies(t *testing.T) {
 	if !ok {
 		t.Fatal("no refresh cookie")
 	}
-	// Scoping the refresh token keeps it off ordinary API traffic; widening this
-	// path would send the long-lived credential with every request.
+	// The path must cover the whole API: the server renews the session on
+	// whatever route the request hits, which only works if the browser sends the
+	// cookie there.
 	if refresh.Path != refreshPath {
 		t.Fatalf("refresh cookie path = %q, want %q", refresh.Path, refreshPath)
 	}
@@ -148,18 +149,23 @@ func TestClearSessionExpiresBothCookies(t *testing.T) {
 	a.ClearSession(w)
 
 	cookies := w.Result().Cookies()
-	if len(cookies) != 2 {
-		t.Fatalf("cleared %d cookies, want 2", len(cookies))
-	}
-	paths := map[string]string{accessCookie: "/", refreshCookie: refreshPath}
+	cleared := map[string]bool{}
 	for _, c := range cookies {
 		if c.Value != "" || c.MaxAge >= 0 {
 			t.Fatalf("cookie %s not expired: value=%q maxAge=%d", c.Name, c.Value, c.MaxAge)
 		}
-		// The browser only drops a cookie when the path matches the one it was
-		// set with, so a mismatch here would leave the session alive.
-		if want := paths[c.Name]; c.Path != want {
-			t.Fatalf("cookie %s path = %q, want %q", c.Name, c.Path, want)
+		cleared[c.Name+" "+c.Path] = true
+	}
+	// A browser only drops a cookie when the path matches the one it was set
+	// with. The legacy path is cleared too, so a browser still holding a cookie
+	// from before the path widened is not left with a stray one.
+	for _, want := range []string{
+		accessCookie + " /",
+		refreshCookie + " " + refreshPath,
+		refreshCookie + " " + legacyRefreshPath,
+	} {
+		if !cleared[want] {
+			t.Fatalf("logout did not clear %q (cleared: %v)", want, cleared)
 		}
 	}
 }

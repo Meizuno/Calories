@@ -143,11 +143,21 @@ Two HttpOnly cookies, so no token is ever reachable from page script:
 | cookie | what | path | lifetime |
 |---|---|---|---|
 | `access_token` | signed JWT (HS256, `sub` = user id) | `/` | `ACCESS_TTL`, default 15m |
-| `refresh_token` | opaque random, sha256-hashed in the DB | `/api/auth` | `REFRESH_TTL`, default 30d |
+| `refresh_token` | opaque random, sha256-hashed in the DB | `/api` | `REFRESH_TTL`, default 30d |
 
-Verifying a request is a signature check — no database round-trip. When the access
-token expires the API 401s, the SPA calls `POST /api/auth/refresh`, and the request
-is replayed.
+Verifying a request is a signature check — no database round-trip. **The server
+renews the session itself**: a request arriving with an expired access token but
+a good refresh cookie is rotated in place and served normally, so a 401 means the
+session is genuinely over. That is why the refresh cookie covers `/api` rather
+than just the refresh endpoint — the browser has to send it to the route being
+called. `POST /api/auth/refresh` still exists for the SPA to call explicitly.
+
+Because rotation happens on whichever request arrives first, and a page load
+fires several at once still carrying the old cookie, a just-rotated token keeps
+working for `ReuseGrace` (20s). Without that window the second request of a page
+load would look like a replay and sign the user out. The cost is bounded and
+deliberate: a stolen token also works inside that window; outside it, reuse still
+burns the whole family.
 
 Refresh tokens **rotate**: each refresh issues a new one and marks the old used, in
 a single statement that also asserts it was unused — so two concurrent refreshes

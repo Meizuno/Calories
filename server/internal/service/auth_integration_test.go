@@ -154,7 +154,7 @@ func TestLogin(t *testing.T) {
 }
 
 func TestRefreshRotation(t *testing.T) {
-	a, _ := newAuth(t)
+	a, st := newAuth(t)
 	ctx := context.Background()
 	u := mustRegister(t, a, "rotate@example.com", "correcthorse")
 
@@ -180,7 +180,9 @@ func TestRefreshRotation(t *testing.T) {
 	})
 
 	// The point of rotation: a token presented twice means it leaked, so the
-	// whole chain dies — attacker and victim are signed out together.
+	// whole chain dies — attacker and victim are signed out together. Reuse only
+	// counts as an attack once ReuseGrace has passed; inside that window it is a
+	// concurrent request, covered separately below.
 	t.Run("replaying a spent token burns the family", func(t *testing.T) {
 		first, err := a.IssueRefresh(ctx, u.ID, "", "test-agent")
 		if err != nil {
@@ -189,6 +191,12 @@ func TestRefreshRotation(t *testing.T) {
 		_, second, err := a.Rotate(ctx, first, "test-agent")
 		if err != nil {
 			t.Fatalf("rotate: %v", err)
+		}
+		// Age the spent token past the grace window instead of sleeping for it.
+		if _, err := st.Pool.Exec(ctx,
+			`UPDATE refresh_tokens SET used_at = now() - $1::interval WHERE user_id = $2 AND used_at IS NOT NULL`,
+			(service.ReuseGrace + time.Minute).String(), u.ID); err != nil {
+			t.Fatalf("age token: %v", err)
 		}
 
 		if _, _, err := a.Rotate(ctx, first, "test-agent"); !errors.Is(err, service.ErrInvalidToken) {
@@ -206,31 +214,55 @@ func TestRefreshRotation(t *testing.T) {
 		}
 	})
 
-	// Two tabs refreshing at once must not both succeed: the UPDATE that marks a
-	// token used also asserts it was unused, so exactly one wins.
-	t.Run("concurrent rotation has a single winner", func(t *testing.T) {
-		tok, err := a.IssueRefresh(ctx, u.ID, "", "test-agent")
+	// Server-side rotation happens on whichever request arrives first, and a page
+	// load fires several at once carrying the same cookie. They must all survive.
+	t.Run("a burst of requests with one cookie all succeed", func(t *testing.T) {
+		a2, _ := newAuth(t)
+		u2 := mustRegister(t, a2, "burst@example.com", "correcthorse")
+		tok, err := a2.IssueRefresh(ctx, u2.ID, "", "agent")
 		if err != nil {
 			t.Fatalf("issue: %v", err)
 		}
-		const racers = 8
+		const n = 8
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		wins := 0
-		wg.Add(racers)
-		for i := 0; i < racers; i++ {
+		var fails []error
+		wg.Add(n)
+		for i := 0; i < n; i++ {
 			go func() {
 				defer wg.Done()
-				if _, _, err := a.Rotate(context.Background(), tok, "test-agent"); err == nil {
+				if _, _, err := a2.Rotate(context.Background(), tok, "agent"); err != nil {
 					mu.Lock()
-					wins++
+					fails = append(fails, err)
 					mu.Unlock()
 				}
 			}()
 		}
 		wg.Wait()
-		if wins != 1 {
-			t.Fatalf("%d concurrent rotations succeeded, want exactly 1", wins)
+		if len(fails) > 0 {
+			t.Fatalf("%d/%d concurrent rotations failed (first: %v) — a page load would sign the user out", len(fails), n, fails[0])
+		}
+		// The session must still be alive afterwards.
+		if _, _, err := a2.Rotate(ctx, tok, "agent"); err != nil {
+			t.Fatalf("session died after the burst: %v", err)
+		}
+	})
+
+	// The grace window must not resurrect a session that was deliberately ended.
+	t.Run("grace window cannot revive a revoked family", func(t *testing.T) {
+		a2, _ := newAuth(t)
+		u2 := mustRegister(t, a2, "revived@example.com", "correcthorse")
+		tok, err := a2.IssueRefresh(ctx, u2.ID, "", "agent")
+		if err != nil {
+			t.Fatalf("issue: %v", err)
+		}
+		if _, _, err := a2.Rotate(ctx, tok, "agent"); err != nil { // marks it used
+			t.Fatalf("rotate: %v", err)
+		}
+		a2.RevokeRefresh(ctx, tok) // logout
+		// Still inside ReuseGrace, but the family is gone.
+		if _, _, err := a2.Rotate(ctx, tok, "agent"); !errors.Is(err, service.ErrInvalidToken) {
+			t.Fatal("a revoked token was revived by the grace window")
 		}
 	})
 

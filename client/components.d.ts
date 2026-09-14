@@ -24,7 +24,6 @@ declare module 'vue' {
     UButton: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
     UCalendar: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Calendar.vue')['default']
     UCard: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Card.vue')['default']
-    UDropdownMenu: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/DropdownMenu.vue')['default']
     UInput: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
     UPopover: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Popover.vue')['default']
     USelect: typeof import('./node_modules/.pnpm/@nuxt+ui@3.3.7_@babel+parse_95fa38e3192d25aff494cb1c2d893863/node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
