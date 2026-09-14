@@ -1,0 +1,94 @@
+# The checks, in one place. Called by ci.yml on every push/PR and by deploy.yml
+# before it publishes, so nothing ships without them passing.
+name: Tests
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+
+    # The auth tests that matter most — refresh rotation, replay detection,
+    # account linking — only run against a real database. Without this service
+    # they would skip silently and CI would look green while covering nothing.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: calories
+          POSTGRES_PASSWORD: calories
+          POSTGRES_DB: calories_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U calories -d calories_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: server/go.sum
+
+      - name: Verify formatting
+        working-directory: server
+        run: test -z "$(gofmt -l .)"
+
+      - name: go vet
+        working-directory: server
+        run: go vet ./...
+
+      - name: Build
+        working-directory: server
+        run: go build ./...
+
+      # -race because the suite deliberately hammers refresh rotation from
+      # several goroutines; a data race there would otherwise surface only in
+      # production, as a user being signed out mid-session.
+      - name: Test
+        working-directory: server
+        env:
+          TEST_DATABASE_URL: postgres://calories:calories@localhost:5432/calories_test?sslmode=disable
+        run: go test -race ./...
+
+      # The database-backed tests skip when TEST_DATABASE_URL is unset, which is
+      # a silent pass. Prove they actually ran.
+      - name: Confirm the database tests were not skipped
+        working-directory: server
+        env:
+          TEST_DATABASE_URL: postgres://calories:calories@localhost:5432/calories_test?sslmode=disable
+        run: |
+          go test -run TestRefreshRotation -v ./internal/service/ | tee /tmp/rotation.log
+          grep -q -- "--- PASS: TestRefreshRotation/replaying_a_spent_token_burns_the_family" /tmp/rotation.log
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        working-directory: client
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: client
+        run: pnpm build

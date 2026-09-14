@@ -1,10 +1,12 @@
 // The single place every API call goes through.
 //
 // Auth is two cookies, both HttpOnly, so this file can never see them: a
-// short-lived access JWT sent with every request, and a refresh token scoped to
-// /api/auth. When the access token expires the server answers 401; we call
-// /api/auth/refresh once, then replay the original request. If the refresh also
-// fails the session is genuinely over and onAuthLost() takes over.
+// short-lived access JWT and a rotating refresh token.
+//
+// The server renews the session itself when the access token has expired, so a
+// 401 normally means the session is genuinely over. This retry stays as a
+// fallback for the cases the server cannot cover — a request whose response had
+// already started, say — and calls /api/auth/refresh once before giving up.
 
 type AuthLostHandler = () => void;
 

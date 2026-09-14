@@ -51,8 +51,8 @@ function clear() {
 export async function loadSession(force = false) {
   if (session.loaded && !force) return;
   try {
-    // noRetry: a 401 here is the normal anonymous case, not an expired session —
-    // /api/session answers 200 either way, so only a real error lands here.
+    // noRetry: /api/session answers 200 either way and renews the session itself
+    // when the access token has expired, so a failure here is a real error.
     adopt(await apiFetch<SessionResponse>("/api/session", { noRetry: true }));
   } catch {
     clear();
