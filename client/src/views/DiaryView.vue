@@ -6,6 +6,7 @@ import { api } from "../lib/api";
 import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
 import MealTable from "../components/MealTable.vue";
+import { t, weekdayShort } from "../lib/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -24,8 +25,7 @@ function shiftDate(d: string, n: number) {
   t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0, 10);
 }
-const WD = ["ne", "po", "út", "st", "čt", "pá", "so"];
-const weekday = (d: string) => WD[new Date(d + "T00:00:00Z").getUTCDay()];
+const weekday = (d: string) => weekdayShort(d);
 
 function goto(d: string) {
   if (d > todayISO()) return; // no future days
@@ -86,13 +86,13 @@ function toggleAll() {
 }
 
 async function delEntry(id: number) {
-  if (confirm("Smazat položku?")) {
+  if (confirm(t("diary.confirmDeleteEntry"))) {
     day.value = await api.deleteEntry(date.value, id);
     loadDays();
   }
 }
 async function delMeal(id: number) {
-  if (confirm("Smazat jídlo i s položkami?")) {
+  if (confirm(t("diary.confirmDeleteMeal"))) {
     day.value = await api.deleteMeal(date.value, id);
     loadDays();
   }
@@ -130,7 +130,7 @@ const k = (n: number) => Math.round(n);
   <div v-if="day" class="space-y-5">
     <div class="flex items-center justify-between gap-2">
       <!-- jump to today; disabled when today is already selected -->
-      <UButton size="sm" color="neutral" variant="soft" label="Dnes" :disabled="isToday" @click="goto(todayISO())" />
+      <UButton size="sm" color="neutral" variant="soft" :label="t('common.today')" :disabled="isToday" @click="goto(todayISO())" />
 
       <!-- prev / next arrows hugging the date -->
       <div class="flex items-center gap-1">
@@ -141,7 +141,7 @@ const k = (n: number) => Math.round(n);
 
       <!-- calendar; only days that have data are selectable -->
       <UPopover v-model:open="calOpen">
-        <UButton size="sm" color="neutral" variant="soft" label="📅" aria-label="Otevřít kalendář" />
+        <UButton size="sm" color="neutral" variant="soft" label="📅" :aria-label="t('diary.openCalendar')" />
         <template #content>
           <UCalendar
             :model-value="calValue"
@@ -157,17 +157,17 @@ const k = (n: number) => Math.round(n);
     <DaySummary :day="day" />
 
     <div class="flex items-center justify-between">
-      <h2 class="text-base font-medium sm:text-lg">Jídelníček</h2>
+      <h2 class="text-base font-medium sm:text-lg">{{ t("diary.title") }}</h2>
       <div class="flex items-center gap-2">
         <UButton
           v-if="day.meals.length"
           size="xs"
           color="neutral"
           variant="soft"
-          :label="allOpen ? 'Sbalit vše' : 'Rozbalit vše'"
+          ::label="allOpen ? t('diary.collapseAll') : t('diary.expandAll')"
           @click="toggleAll"
         />
-        <UButton size="xs" label="+ Přidat" :to="{ path: '/log', query: { date } }" />
+        <UButton size="xs" :label="t('diary.addEntry')" :to="{ path: '/log', query: { date } }" />
       </div>
     </div>
 
@@ -210,14 +210,14 @@ const k = (n: number) => Math.round(n);
                 v-model="mealDraft"
                 size="sm"
                 class="flex-1"
-                placeholder="Název jídla"
+                :placeholder="t('diary.mealNamePlaceholder')"
                 @keydown.enter.prevent="saveMeal(item.meal.id)"
                 @keydown.esc="cancelEdit"
               />
-              <UButton size="xs" label="Uložit" @click="saveMeal(item.meal.id)" />
-              <UButton size="xs" color="neutral" variant="ghost" label="Zrušit" @click="cancelEdit" />
+              <UButton size="xs" :label="t('common.save')" @click="saveMeal(item.meal.id)" />
+              <UButton size="xs" color="neutral" variant="ghost" :label="t('common.cancel')" @click="cancelEdit" />
             </div>
-            <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" placeholder="Poznámka (komentář)…" />
+            <UTextarea v-model="noteDraft" :rows="2" autoresize class="w-full" :placeholder="t('diary.notePlaceholder')" />
           </div>
           <MealTable
             editable
@@ -231,10 +231,10 @@ const k = (n: number) => Math.round(n);
     </UAccordion>
 
     <div v-else class="rounded-lg border border-dashed border-gray-200 p-8 text-center dark:border-gray-800">
-      <p class="text-sm text-gray-500">Zatím žádná jídla.</p>
-      <UButton class="mt-3" size="sm" label="+ Přidat jídlo" :to="{ path: '/log', query: { date } }" />
+      <p class="text-sm text-gray-500">{{ t("diary.noMeals") }}</p>
+      <UButton class="mt-3" size="sm" :label="t('diary.addMeal')" :to="{ path: '/log', query: { date } }" />
     </div>
   </div>
 
-  <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+  <div v-else class="p-8 text-center text-gray-400">{{ t("common.loading") }}</div>
 </template>

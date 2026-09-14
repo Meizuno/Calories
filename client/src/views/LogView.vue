@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api } from "../lib/api";
 import type { Day } from "../lib/types";
+import { t, weekdayShort } from "../lib/i18n";
 
 const route = useRoute();
 
@@ -12,8 +13,7 @@ const todayISO = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 const date = computed(() => (route.query.date as string) || todayISO());
-const WD = ["ne", "po", "út", "st", "čt", "pá", "so"];
-const weekday = (d: string) => WD[new Date(d + "T00:00:00Z").getUTCDay()];
+const weekday = (d: string) => weekdayShort(d);
 
 const day = ref<Day | null>(null);
 const mealId = ref<number>();
@@ -69,18 +69,18 @@ async function addEntry() {
   <div v-if="day" class="space-y-5">
     <div class="flex items-center justify-between gap-3">
       <div>
-        <h1 class="text-lg font-semibold sm:text-xl">Přidat</h1>
+        <h1 class="text-lg font-semibold sm:text-xl">{{ t("log.title") }}</h1>
         <p class="text-sm text-gray-500 tabular-nums">{{ date }} <span class="text-gray-400">({{ weekday(date) }})</span></p>
       </div>
-      <UButton color="neutral" variant="soft" label="← Deník" :to="{ path: '/', query: { date } }" />
+      <UButton color="neutral" variant="soft" :label="t('log.back')" :to="{ path: '/', query: { date } }" />
     </div>
 
     <!-- New meal (Snídaně, Oběd…) — there must be a meal before items can be added. -->
     <UCard>
-      <template #header><span class="font-medium">Nové jídlo</span></template>
+      <template #header><span class="font-medium">{{ t("log.newMeal") }}</span></template>
       <form class="flex gap-2" @submit.prevent="addMeal">
-        <UInput v-model="newMeal" placeholder="Snídaně, Oběd, Večeře…" class="flex-1" />
-        <UButton type="submit" color="neutral" label="+ Jídlo" />
+        <UInput v-model="newMeal" :placeholder="t('log.mealPlaceholder')" class="flex-1" />
+        <UButton type="submit" color="neutral" :label="t('log.addMeal')" />
       </form>
       <div v-if="hasMeals" class="mt-3 flex flex-wrap gap-1.5">
         <span
@@ -93,22 +93,22 @@ async function addEntry() {
 
     <!-- New item into a meal. -->
     <UCard v-if="hasMeals">
-      <template #header><span class="font-medium">Přidat položku</span></template>
+      <template #header><span class="font-medium">{{ t("log.addEntry") }}</span></template>
       <form class="grid grid-cols-2 gap-3 sm:grid-cols-4" @submit.prevent="addEntry">
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Přidat do
+          {{ t("log.addTo") }}
           <USelect v-model="mealId" :items="mealSelectItems" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Název
-          <UInput v-model="entry.name" placeholder="např. Banán" />
+          {{ t("common.name") }}
+          <UInput v-model="entry.name" :placeholder="t('log.foodPlaceholder')" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Množství
+          {{ t("common.quantity") }}
           <UInput v-model="entry.quantity" type="number" step="any" min="0" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Jednotka
+          {{ t("common.unit") }}
           <USelect v-model="entry.unit" :items="units" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
@@ -116,25 +116,25 @@ async function addEntry() {
           <UInput v-model="entry.kcal" type="number" step="any" min="0" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Sach.
+          {{ t("macros.carbShort") }}.
           <UInput v-model="entry.carb" type="number" step="any" min="0" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Bílk.
+          {{ t("macros.proteinShort") }}.
           <UInput v-model="entry.protein" type="number" step="any" min="0" />
         </label>
         <label class="flex flex-col gap-1 text-xs text-gray-500">
-          Tuky
+          {{ t("macros.fatShort") }}
           <UInput v-model="entry.fat" type="number" step="any" min="0" />
         </label>
         <div class="col-span-2 flex justify-end sm:col-span-4">
-          <UButton type="submit" label="Přidat položku" />
+          <UButton type="submit" :label="t('log.addEntry')" />
         </div>
       </form>
     </UCard>
 
-    <p v-else class="text-center text-sm text-gray-500">Nejdřív přidej jídlo, pak do něj můžeš vkládat položky.</p>
+    <p v-else class="text-center text-sm text-gray-500">{{ t("log.addMealFirst") }}</p>
   </div>
 
-  <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+  <div v-else class="p-8 text-center text-gray-400">{{ t("common.loading") }}</div>
 </template>

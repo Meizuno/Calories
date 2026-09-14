@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Day } from "../lib/types";
 import RingChart from "./RingChart.vue";
 import MacroBars from "./MacroBars.vue";
+import { t } from "../lib/i18n";
 
 const props = defineProps<{ day: Day }>();
 
@@ -35,12 +36,12 @@ onUnmounted(() => mq?.removeEventListener("change", sync));
         >
           <div>
             <div class="text-xl font-semibold tabular-nums sm:text-3xl">{{ k(day.remaining.kcal) }}</div>
-            <div class="text-xs text-gray-500 sm:text-sm">kcal zbývá</div>
+            <div class="text-xs text-gray-500 sm:text-sm">{{ t("day.remaining") }}</div>
           </div>
         </RingChart>
         <div class="text-sm sm:text-base">
           <div class="tabular-nums"><b>{{ k(day.eaten.kcal) }}</b> / {{ k(day.target.kcal) }} kcal</div>
-          <div class="text-gray-500">snědeno / cíl</div>
+          <div class="text-gray-500">{{ t("day.eatenOfGoal") }}</div>
         </div>
       </div>
 

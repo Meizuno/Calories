@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { api } from "../lib/api";
 import { session, loadSession, changePassword } from "../lib/session";
 import { ApiError } from "../lib/http";
+import { t } from "../lib/i18n";
 import type { Profile } from "../lib/types";
 
 const router = useRouter();
@@ -15,14 +16,15 @@ const saving = ref(false);
 // only needs the new one; changing an existing password requires the current.
 const pw = ref({ current: "", next: "" });
 const pwBusy = ref(false);
-const pwError = ref("");
+const pwErrorCode = ref("");
+const pwError = computed(() => (pwErrorCode.value ? t(`errors.${pwErrorCode.value}`) : ""));
 const pwDone = ref(false);
 const hasPassword = computed(() => session.user?.hasPassword ?? true);
 const googleLinked = computed(() => session.user?.providers.includes("google") ?? false);
 
 async function savePassword() {
   if (pwBusy.value || !pw.value.next) return;
-  pwError.value = "";
+  pwErrorCode.value = "";
   pwDone.value = false;
   pwBusy.value = true;
   try {
@@ -30,7 +32,7 @@ async function savePassword() {
     pw.value = { current: "", next: "" };
     pwDone.value = true;
   } catch (e) {
-    pwError.value = e instanceof ApiError ? e.message : "Heslo se nepodařilo změnit.";
+    pwErrorCode.value = e instanceof ApiError ? e.code : "unknown";
   } finally {
     pwBusy.value = false;
   }
@@ -83,34 +85,34 @@ async function copyShare() {
 <template>
   <div v-if="profile" class="mx-auto max-w-lg space-y-5">
     <div v-if="isOnboarding" class="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
-      Vítej! Než začneš, vyplň prosím svůj profil a denní cíl.
+      {{ t("profile.onboardingHint") }}
     </div>
-    <h1 class="text-xl font-semibold sm:text-2xl">{{ isOnboarding ? "Dokončit registraci" : "Můj profil" }}</h1>
+    <h1 class="text-xl font-semibold sm:text-2xl">{{ isOnboarding ? t("profile.finishSignup") : t("profile.title") }}</h1>
 
     <UCard>
       <form class="space-y-4" @submit.prevent="save">
         <label class="block">
-          <span class="mb-1 block text-xs text-gray-500">Jméno</span>
-          <UInput v-model="form.name" placeholder="Tvé jméno" />
+          <span class="mb-1 block text-xs text-gray-500">{{ t("profile.name") }}</span>
+          <UInput v-model="form.name" :placeholder="t('auth.namePlaceholder')" />
         </label>
 
         <div>
-          <span class="mb-1 block text-xs text-gray-500">Denní cíl</span>
+          <span class="mb-1 block text-xs text-gray-500">{{ t("profile.dailyGoal") }}</span>
           <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label class="flex flex-col gap-1 text-xs text-gray-500">
               kcal
               <UInput v-model="form.kcal" type="number" step="any" min="0" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
-              Sacharidy (g)
+              {{ t("macros.carb") }} (g)
               <UInput v-model="form.carb" type="number" step="any" min="0" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
-              Bílkoviny (g)
+              {{ t("macros.protein") }} (g)
               <UInput v-model="form.protein" type="number" step="any" min="0" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
-              Tuky (g)
+              {{ t("macros.fat") }} (g)
               <UInput v-model="form.fat" type="number" step="any" min="0" />
             </label>
           </div>
@@ -118,19 +120,19 @@ async function copyShare() {
 
         <div class="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-800">
           <div>
-            <div class="text-sm font-medium">Sdílený profil</div>
-            <div class="text-xs text-gray-500">Zpřístupní deník komukoli přes veřejný odkaz (jen ke čtení).</div>
+            <div class="text-sm font-medium">{{ t("profile.shared") }}</div>
+            <div class="text-xs text-gray-500">{{ t("profile.sharedHint") }}</div>
           </div>
           <USwitch v-model="form.shared" />
         </div>
 
         <div v-if="shareUrl" class="flex items-center gap-2">
           <UInput :model-value="shareUrl" readonly class="flex-1" />
-          <UButton color="neutral" variant="soft" label="Kopírovat" @click="copyShare" />
+          <UButton color="neutral" variant="soft" :label="t('common.copy')" @click="copyShare" />
         </div>
 
         <div class="flex justify-end">
-          <UButton type="submit" :loading="saving" :label="isOnboarding ? 'Pokračovat' : 'Uložit'" />
+          <UButton type="submit" :loading="saving" :label="isOnboarding ? t('profile.continue') : t('common.save')" />
         </div>
       </form>
     </UCard>
@@ -140,10 +142,10 @@ async function copyShare() {
     <UCard v-if="!isOnboarding && session.user">
       <div class="space-y-4">
         <div>
-          <h2 class="text-sm font-medium">Účet</h2>
+          <h2 class="text-sm font-medium">{{ t("profile.account") }}</h2>
           <p class="text-xs text-gray-500">
             {{ session.user.email }}
-            <span v-if="googleLinked"> · propojeno s Google</span>
+            <span v-if="googleLinked"> · {{ t("profile.googleLinked") }}</span>
           </p>
         </div>
 
@@ -152,25 +154,25 @@ async function copyShare() {
             {{ pwError }}
           </p>
           <p v-else-if="pwDone" class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
-            Heslo bylo změněno. Ostatní zařízení byla odhlášena.
+            {{ t("profile.passwordChanged") }}
           </p>
 
           <label v-if="hasPassword" class="block">
-            <span class="mb-1 block text-xs text-gray-500">Současné heslo</span>
+            <span class="mb-1 block text-xs text-gray-500">{{ t("profile.currentPassword") }}</span>
             <UInput v-model="pw.current" type="password" autocomplete="current-password" />
           </label>
           <label class="block">
-            <span class="mb-1 block text-xs text-gray-500">{{ hasPassword ? "Nové heslo" : "Nastavit heslo" }}</span>
-            <UInput v-model="pw.next" type="password" autocomplete="new-password" placeholder="Alespoň 8 znaků" />
+            <span class="mb-1 block text-xs text-gray-500">{{ hasPassword ? t("profile.newPassword") : t("profile.setPassword") }}</span>
+            <UInput v-model="pw.next" type="password" autocomplete="new-password" :placeholder="t('auth.passwordMin')" />
           </label>
 
           <div class="flex justify-end">
-            <UButton type="submit" color="neutral" variant="soft" :loading="pwBusy" :label="hasPassword ? 'Změnit heslo' : 'Nastavit heslo'" />
+            <UButton type="submit" color="neutral" variant="soft" :loading="pwBusy" :label="hasPassword ? t('profile.changePassword') : t('profile.setPassword')" />
           </div>
         </form>
       </div>
     </UCard>
   </div>
 
-  <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+  <div v-else class="p-8 text-center text-gray-400">{{ t("common.loading") }}</div>
 </template>

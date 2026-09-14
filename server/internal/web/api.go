@@ -668,6 +668,15 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// writeError replies with a machine-readable `code` alongside the English
+// message. The SPA translates the code, so the server stays language-agnostic
+// and rewording a message never changes what a user reads.
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
+}
+
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)

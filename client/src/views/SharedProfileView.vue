@@ -6,6 +6,7 @@ import type { Day, Profile } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
 import MealTable from "../components/MealTable.vue";
 import StatsPanel from "../components/StatsPanel.vue";
+import { t, weekdayShort } from "../lib/i18n";
 
 const route = useRoute();
 const uuid = computed(() => route.params.uuid as string);
@@ -29,8 +30,7 @@ function shiftDate(d: string, n: number) {
   t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0, 10);
 }
-const WD = ["ne", "po", "út", "st", "čt", "pá", "so"];
-const weekday = (d: string) => WD[new Date(d + "T00:00:00Z").getUTCDay()];
+const weekday = (d: string) => weekdayShort(d);
 function goto(d: string) {
   if (d > todayISO()) return;
   date.value = d;
@@ -51,18 +51,18 @@ const k = (n: number) => Math.round(n);
 </script>
 
 <template>
-  <div v-if="error" class="p-8 text-center text-gray-400">Profil nenalezen nebo není sdílený.</div>
+  <div v-if="error" class="p-8 text-center text-gray-400">{{ t("shared.notFound") }}</div>
 
   <div v-else-if="profile" class="space-y-5">
     <h1 class="text-xl font-semibold sm:text-2xl">
-      {{ profile.name || "Sdílený profil" }}
-      <span class="text-sm font-normal text-gray-400">(jen ke čtení)</span>
+      {{ profile.name || t("shared.title") }}
+      <span class="text-sm font-normal text-gray-400">{{ t("shared.readOnly") }}</span>
     </h1>
 
     <!-- switch between the per-day tables and the period statistics -->
     <div class="flex gap-1.5">
-      <UButton size="sm" :color="tab === 'diary' ? 'primary' : 'neutral'" :variant="tab === 'diary' ? 'solid' : 'soft'" label="Deník" @click="tab = 'diary'" />
-      <UButton size="sm" :color="tab === 'stats' ? 'primary' : 'neutral'" :variant="tab === 'stats' ? 'solid' : 'soft'" label="Statistika" @click="tab = 'stats'" />
+      <UButton size="sm" :color="tab === 'diary' ? 'primary' : 'neutral'" :variant="tab === 'diary' ? 'solid' : 'soft'" :label="t('shared.diary')" @click="tab = 'diary'" />
+      <UButton size="sm" :color="tab === 'stats' ? 'primary' : 'neutral'" :variant="tab === 'stats' ? 'solid' : 'soft'" :label="t('shared.stats')" @click="tab = 'stats'" />
     </div>
 
     <!-- Diary: per-day meal tables with day navigation -->
@@ -90,7 +90,7 @@ const k = (n: number) => Math.round(n);
           <MealTable class="mt-2" :meal="m" />
         </div>
       </div>
-      <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+      <div v-else class="p-8 text-center text-gray-400">{{ t("common.loading") }}</div>
     </template>
 
     <!-- Statistics: same week/month stepping as the private profile. Keyed by
@@ -103,5 +103,5 @@ const k = (n: number) => Math.round(n);
     />
   </div>
 
-  <div v-else class="p-8 text-center text-gray-400">Načítání…</div>
+  <div v-else class="p-8 text-center text-gray-400">{{ t("common.loading") }}</div>
 </template>

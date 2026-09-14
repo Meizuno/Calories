@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { t } from "../lib/i18n";
 
 type Metric = "kcal" | "carb" | "protein" | "fat";
 
@@ -15,12 +16,12 @@ export interface DayBars {
 
 const props = defineProps<{ points: DayBars[] }>();
 
-const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
-  { key: "kcal", label: "Kalorie", color: "#8b5cf6", unit: "kcal" },
-  { key: "carb", label: "Sacharidy", color: "#0ea5e9", unit: "g" },
-  { key: "protein", label: "Bílkoviny", color: "#10b981", unit: "g" },
-  { key: "fat", label: "Tuky", color: "#f59e0b", unit: "g" },
-];
+const METRICS = computed<{ key: Metric; label: string; color: string; unit: string }[]>(() => [
+  { key: "kcal", label: t("macros.calories"), color: "#8b5cf6", unit: "kcal" },
+  { key: "carb", label: t("macros.carb"), color: "#0ea5e9", unit: "g" },
+  { key: "protein", label: t("macros.protein"), color: "#10b981", unit: "g" },
+  { key: "fat", label: t("macros.fat"), color: "#f59e0b", unit: "g" },
+]);
 
 // Track pixel width so the SVG uses a real px coordinate system (crisp text).
 const host = ref<HTMLElement | null>(null);
@@ -49,7 +50,7 @@ const barW = computed(() => Math.max(1, (slot.value - 2 * groupPad.value - 3 * G
 // Axis tops out at the goal (100%) or higher if a bucket overshoots; rounded up
 // to a clean step so the 100% goal line lands on the grid.
 const maxPct = computed(() =>
-  Math.max(0, ...props.points.filter((p) => p.logged).flatMap((p) => METRICS.map((m) => p.pct[m.key]))),
+  Math.max(0, ...props.points.filter((p) => p.logged).flatMap((p) => METRICS.value.map((m) => p.pct[m.key]))),
 );
 const yMax = computed(() => {
   const step = 25;
@@ -72,7 +73,7 @@ const rects = computed(() => {
   props.points.forEach((p, i) => {
     if (!p.logged) return;
     const x0 = PAD.left + slot.value * i + groupPad.value;
-    METRICS.forEach((m, j) => {
+    METRICS.value.forEach((m, j) => {
       const pct = p.pct[m.key];
       const y = yFor(pct);
       out.push({
@@ -113,7 +114,7 @@ const goalY = computed(() => yFor(100));
 
       <!-- 100% goal line -->
       <line :x1="PAD.left" :x2="width - PAD.right" :y1="goalY" :y2="goalY" class="stroke-gray-400" stroke-width="1" stroke-dasharray="4 4" stroke-opacity="0.8" />
-      <text :x="width - PAD.right" :y="goalY - 4" text-anchor="end" class="fill-gray-400" font-size="9">cíl</text>
+      <text :x="width - PAD.right" :y="goalY - 4" text-anchor="end" class="fill-gray-400" font-size="9">{{ t("macros.goal") }}</text>
 
       <!-- grouped bars: 4 per bucket (kcal / carb / protein / fat), % of goal -->
       <rect
