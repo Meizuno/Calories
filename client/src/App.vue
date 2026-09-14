@@ -18,18 +18,14 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
 // Hand Nuxt UI the matching locale so its own components (the calendar, menus)
 // speak the same language as our strings.
 const uiLocale = computed(() => (currentLocale() === "cs" ? uiCs : uiEn));
-// The picker shows the language currently in use; the menu lists every locale
-// with a tick against the active one.
+// The switcher shows the language currently in use (flag + code); clicking it
+// moves to the next one. With two locales that is a plain toggle.
+const LOCALES = Object.keys(LOCALE_NAMES) as Locale[];
 const activeLocale = computed(() => currentLocale());
-const localeItems = computed(() =>
-  (Object.keys(LOCALE_NAMES) as Locale[]).map((code) => ({
-    label: LOCALE_NAMES[code],
-    icon: LOCALE_FLAGS[code],
-    type: "checkbox" as const,
-    checked: code === activeLocale.value,
-    onSelect: () => setLocale(code),
-  })),
-);
+function cycleLocale() {
+  const next = LOCALES[(LOCALES.indexOf(activeLocale.value) + 1) % LOCALES.length];
+  setLocale(next);
+}
 </script>
 
 <template>
@@ -44,18 +40,17 @@ const localeItems = computed(() =>
         </RouterLink>
 
         <div class="flex items-center gap-1">
-        <UDropdownMenu :items="localeItems" :content="{ align: 'end' }">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            :icon="LOCALE_FLAGS[activeLocale]"
-            :label="activeLocale.toUpperCase()"
-            :title="LOCALE_NAMES[activeLocale]"
-            :aria-label="t('nav.language')"
-            class="gap-1.5 text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400"
-          />
-        </UDropdownMenu>
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :icon="LOCALE_FLAGS[activeLocale]"
+          :label="activeLocale.toUpperCase()"
+          :title="LOCALE_NAMES[activeLocale]"
+          :aria-label="t('nav.language')"
+          class="gap-1.5 text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400"
+          @click="cycleLocale"
+        />
 
         <nav v-if="session.authenticated" class="flex items-center gap-1">
           <RouterLink
