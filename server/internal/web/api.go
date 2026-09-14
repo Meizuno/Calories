@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -17,22 +16,30 @@ import (
 )
 
 type Handlers struct {
-	diary        *service.Diary
-	catalog      *service.Catalog
-	profiles     *service.Profiles
-	tokens       *service.Tokens
-	auth         *Auth
-	loginURL     string
-	logoutURL    string
-	cookieDomain string
-	httpClient   *http.Client
+	diary    *service.Diary
+	catalog  *service.Catalog
+	profiles *service.Profiles
+	tokens   *service.Tokens
+	auth     *Auth
+	authsvc  *service.Auth
+	// google is nil when Google sign-in is not configured; /api/session reports
+	// that so the SPA knows whether to show the button.
+	google *Google
+	// allowedEmails gates who may complete the Google flow (lowercased).
+	allowedEmails map[string]bool
+	// allowRegistration opens POST /api/auth/register; off by default.
+	allowRegistration bool
 }
 
-func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, tokens *service.Tokens, auth *Auth, loginURL, logoutURL, cookieDomain string) *Handlers {
+func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, tokens *service.Tokens, auth *Auth, authsvc *service.Auth, google *Google, allowedEmails []string, allowRegistration bool) *Handlers {
+	allowed := make(map[string]bool, len(allowedEmails))
+	for _, e := range allowedEmails {
+		allowed[strings.ToLower(strings.TrimSpace(e))] = true
+	}
 	return &Handlers{
-		diary: diary, catalog: catalog, profiles: profiles, tokens: tokens, auth: auth,
-		loginURL: loginURL, logoutURL: logoutURL, cookieDomain: cookieDomain,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		diary: diary, catalog: catalog, profiles: profiles, tokens: tokens,
+		auth: auth, authsvc: authsvc, google: google,
+		allowedEmails: allowed, allowRegistration: allowRegistration,
 	}
 }
 
@@ -462,105 +469,50 @@ func profileDTO(p db.Profile) profileResp {
 }
 
 // Session is public: it reports whether the caller has a session and, if so, their
-// profile. The SPA uses it to bootstrap (welcome vs app, onboarding, login link).
+// account and profile. The SPA uses it to bootstrap (welcome vs app, onboarding)
+// and to learn which sign-in methods this deployment offers.
 func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
-	uid := h.auth.ResolveWithRefresh(w, r)
+	uid := h.auth.Resolve(r)
 	if uid == "" {
-		writeJSON(w, map[string]any{"authenticated": false})
+		writeJSON(w, map[string]any{
+			"authenticated": false,
+			"google":        h.google != nil,
+			"registration":  h.allowRegistration,
+		})
 		return
 	}
-	prof, err := h.profiles.Ensure(r.Context(), uid)
+	h.writeSession(w, r, uid)
+}
+
+// writeSession renders the authenticated session payload. Shared by /api/session
+// and every endpoint that establishes one, so the SPA always gets one shape.
+func (h *Handlers) writeSession(w http.ResponseWriter, r *http.Request, userID string) {
+	user, err := h.authsvc.GetUser(r.Context(), userID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "could not load account", http.StatusInternalServerError)
+		return
+	}
+	prof, err := h.profiles.Ensure(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "could not load profile", http.StatusInternalServerError)
+		return
+	}
+	providers, err := h.authsvc.Providers(r.Context(), userID)
+	if err != nil {
+		http.Error(w, "could not load account", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, map[string]any{
 		"authenticated": true,
-		"profile":       profileDTO(prof),
-	})
-}
-
-// Login (public) starts sign-in: it redirects the browser to the central auth
-// entrypoint with this app's return URL as redirect_url. The SPA reaches it via a
-// top-level navigation (the OAuth flow inherently needs one — a fetch can't do it).
-func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
-	back := returnPath(r)
-	if h.loginURL == "" {
-		// No central auth configured (local dev) — clear any simulated logout and go
-		// back; the dev user is "logged in" again.
-		http.SetCookie(w, &http.Cookie{Name: "dev_logout", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-		http.Redirect(w, r, back, http.StatusFound)
-		return
-	}
-	u, err := url.Parse(h.loginURL)
-	if err != nil {
-		http.Error(w, "bad login url", http.StatusInternalServerError)
-		return
-	}
-	q := u.Query()
-	// Always return to the app ROOT: the auth allowlist matches redirect_url by
-	// exact full URL, so a single entry (https://<host>/) covers every login —
-	// regardless of which page triggered it.
-	q.Set("redirect_url", absoluteURL(r, "/"))
-	u.RawQuery = q.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
-}
-
-// returnPath extracts a SAFE local return path from ?return= (must be a path on
-// this origin — never an absolute/scheme-relative URL, to avoid open redirects).
-func returnPath(r *http.Request) string {
-	p := r.URL.Query().Get("return")
-	if p == "" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") {
-		return "/"
-	}
-	return p
-}
-
-func absoluteURL(r *http.Request, path string) string {
-	scheme := "https"
-	if xf := r.Header.Get("X-Forwarded-Proto"); xf != "" {
-		scheme = xf
-	} else if r.TLS == nil {
-		scheme = "http"
-	}
-	return scheme + "://" + r.Host + path
-}
-
-// Logout (public) revokes the refresh token at the central auth — best-effort,
-// forwarding the refresh cookie server-side — then clears the session cookies on
-// the shared parent domain. Proxied here because the central /logout is POST-only
-// with SameSite=Lax cookies and no CORS, so the SPA can't call it cross-origin.
-func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
-	if h.logoutURL != "" {
-		if rc, err := r.Cookie("refresh_token"); err == nil && rc.Value != "" {
-			if req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.logoutURL, nil); err == nil {
-				req.AddCookie(&http.Cookie{Name: "refresh_token", Value: rc.Value})
-				if resp, err := h.httpClient.Do(req); err == nil {
-					_ = resp.Body.Close()
-				}
-			}
-		}
-	}
-	h.clearCookie(w, "access_token")
-	h.clearCookie(w, "refresh_token")
-	if h.loginURL == "" {
-		// Local dev: no real cookie to clear, so record a simulated logout that the
-		// dev fallback (auth.go) honours until the next /api/login.
-		http.SetCookie(w, &http.Cookie{Name: "dev_logout", Value: "1", Path: "/", MaxAge: 86400, HttpOnly: true, SameSite: http.SameSiteLaxMode})
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (h *Handlers) clearCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     name,
-		Value:    "",
-		Path:     "/",
-		Domain:   h.cookieDomain,
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
+		"google":        h.google != nil,
+		"registration":  h.allowRegistration,
+		"user": map[string]any{
+			"email":       user.Email,
+			"name":        user.Name,
+			"hasPassword": user.PasswordHash != nil,
+			"providers":   providers,
+		},
+		"profile": profileDTO(prof),
 	})
 }
 

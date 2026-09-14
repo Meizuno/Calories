@@ -32,6 +32,17 @@ export interface Day {
   meals: Meal[];
 }
 
+// The account behind the session (distinct from the Profile, which holds the
+// diary's goal and sharing settings).
+export interface SessionUser {
+  email: string;
+  name: string;
+  /** false for an account that has only ever signed in with Google. */
+  hasPassword: boolean;
+  /** Linked OAuth providers, e.g. ["google"]. */
+  providers: string[];
+}
+
 export interface Profile {
   publicId: string;
   name: string;

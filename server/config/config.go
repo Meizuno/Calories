@@ -2,53 +2,117 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"log/slog"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	DatabaseURL     string
-	Port            string
-	DevUserID       string
-	AuthValidateURL string
-	AuthRefreshURL  string
-	AuthLoginURL    string
-	AuthLogoutURL   string
-	CookieDomain    string
-	ClientDir       string
+	DatabaseURL string
+	Port        string
+	ClientDir   string
+
+	// JWTSecret signs the access token (HS256). Rotating it invalidates every
+	// issued access token; refresh tokens live in the database and survive.
+	JWTSecret  string
+	AccessTTL  time.Duration
+	RefreshTTL time.Duration
+	// SecureCookies marks the session cookies Secure. Off for plain-HTTP local
+	// dev, since a browser drops Secure cookies on http://localhost.
+	SecureCookies bool
+
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	// GoogleAllowedEmails is the sign-in allowlist: only these addresses may
+	// complete the Google flow. Empty would mean "anyone", which this app never
+	// wants, so Load always falls back to defaultAllowedEmail.
+	GoogleAllowedEmails []string
+
+	// AllowRegistration opens POST /api/auth/register. Off by default: this is a
+	// single-user app, and open registration combined with no email verification
+	// would let anyone claim an address before its real owner signs in with
+	// Google. The seed tool creates the dev account through the service directly,
+	// so it is unaffected by this.
+	AllowRegistration bool
 }
+
+// The one account allowed to sign in with Google. Override with
+// GOOGLE_ALLOWED_EMAILS (comma-separated) rather than editing this.
+const defaultAllowedEmail = "yuramiron16@gmail.com"
 
 func Load() Config {
 	// Best-effort: load a .env from the working dir for local dev. Real env vars
 	// (shell, Docker) take precedence — godotenv never overrides what's set.
 	_ = godotenv.Load()
 
-	devUser := os.Getenv("DEV_USER_ID")
-	validate := os.Getenv("AUTH_VALIDATE_URL")
-	// Secure by default: only fall back to a dev user when NO central auth is
-	// configured (pure local dev). With AUTH_VALIDATE_URL set, an unauthenticated
-	// request gets 401 (→ the SPA redirects to AUTH_LOGIN_URL) unless DEV_USER_ID
-	// is explicitly provided.
-	if devUser == "" && validate == "" {
-		devUser = "00000000-0000-0000-0000-000000000001"
-	}
-
 	return Config{
-		DatabaseURL:     env("DATABASE_URL", "postgres://calories_user:password@localhost:5432/calories?sslmode=disable"),
-		Port:            env("PORT", "8080"),
-		DevUserID:       devUser,
-		AuthValidateURL: validate,
-		AuthRefreshURL:  os.Getenv("AUTH_REFRESH_URL"),
-		AuthLoginURL:    os.Getenv("AUTH_LOGIN_URL"),
-		AuthLogoutURL:   os.Getenv("AUTH_LOGOUT_URL"),
-		// Parent domain the auth cookies live on (e.g. .meizuno.com) so logout can
-		// clear them; empty = host-only (local dev).
-		CookieDomain: os.Getenv("COOKIE_DOMAIN"),
+		DatabaseURL: env("DATABASE_URL", "postgres://calories_user:password@localhost:5432/calories?sslmode=disable"),
+		Port:        env("PORT", "8080"),
 		// Directory of the built client (Vite dist) to serve. Empty in API-only
 		// dev; set by the Docker image. The server never embeds the client.
 		ClientDir: os.Getenv("CLIENT_DIR"),
+
+		JWTSecret: jwtSecret(),
+		// Short access token, long refresh: a revoked session stops working within
+		// AccessTTL, while a normal user stays signed in for REFRESH_TTL of
+		// inactivity (every refresh issues a new one).
+		AccessTTL:     duration("ACCESS_TTL", 15*time.Minute),
+		RefreshTTL:    duration("REFRESH_TTL", 30*24*time.Hour),
+		SecureCookies: boolEnv("SECURE_COOKIES", os.Getenv("CLIENT_DIR") != ""),
+
+		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		// Must match a redirect URI registered on the Google OAuth client exactly,
+		// e.g. https://calories.meizuno.com/api/auth/google/callback.
+		GoogleRedirectURL:   os.Getenv("GOOGLE_REDIRECT_URL"),
+		GoogleAllowedEmails: allowedEmails(),
+
+		AllowRegistration: boolEnv("ALLOW_REGISTRATION", false),
 	}
+}
+
+// allowedEmails parses GOOGLE_ALLOWED_EMAILS (comma-separated, case-insensitive)
+// and falls back to the single built-in address.
+func allowedEmails() []string {
+	raw := os.Getenv("GOOGLE_ALLOWED_EMAILS")
+	if strings.TrimSpace(raw) == "" {
+		return []string{defaultAllowedEmail}
+	}
+	var out []string
+	for _, e := range strings.Split(raw, ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			out = append(out, e)
+		}
+	}
+	if len(out) == 0 {
+		return []string{defaultAllowedEmail}
+	}
+	return out
+}
+
+// jwtSecret returns JWT_SECRET, or a random per-boot secret for local dev. A
+// generated secret means every restart signs out everyone, which is fine for dev
+// and loud enough to catch a missing production value.
+func jwtSecret() string {
+	if s := os.Getenv("JWT_SECRET"); len(s) >= 32 {
+		return s
+	}
+	if s := os.Getenv("JWT_SECRET"); s != "" {
+		slog.Warn("JWT_SECRET is shorter than 32 characters — generating a temporary one instead")
+	} else {
+		slog.Warn("JWT_SECRET is not set — generating a temporary one; sessions will not survive a restart")
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic("cannot generate a jwt secret: " + err.Error())
+	}
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 func env(key, fallback string) string {
@@ -56,4 +120,28 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func duration(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		slog.Warn("ignoring invalid duration", "key", key, "value", v)
+		return fallback
+	}
+	return d
+}
+
+func boolEnv(key string, fallback bool) bool {
+	switch strings.ToLower(os.Getenv(key)) {
+	case "1", "true", "yes":
+		return true
+	case "0", "false", "no":
+		return false
+	default:
+		return fallback
+	}
 }

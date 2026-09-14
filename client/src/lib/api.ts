@@ -1,35 +1,25 @@
 import type { Day, Profile, Stats } from "./types";
-import { redirectToLogin } from "./session";
+import { apiFetch, JSON_HEADERS } from "./http";
 
-async function asJSON<T>(res: Response): Promise<T> {
-  if (res.status === 401) {
-    redirectToLogin();
-    throw new Error("unauthorized");
-  }
-  if (!res.ok) throw new Error(await res.text());
-  return res.json() as Promise<T>;
-}
-
-const JSON_HEADERS = { "Content-Type": "application/json" };
+// Every call goes through apiFetch, which transparently refreshes an expired
+// access token once and replays the request before giving up on the session.
 
 export const api = {
-  getDay: (date: string) => fetch(`/api/day?date=${date}`).then((r) => asJSON<Day>(r)),
+  getDay: (date: string) => apiFetch<Day>(`/api/day?date=${date}`),
 
   // dates (YYYY-MM-DD) that have logged data — used to enable calendar days
-  getDays: () => fetch("/api/days").then((r) => asJSON<string[]>(r)),
+  getDays: () => apiFetch<string[]>("/api/days"),
 
   // per-day macro totals for an inclusive [from, to] range (YYYY-MM-DD)
-  getStats: (from: string, to: string) =>
-    fetch(`/api/stats?from=${from}&to=${to}`).then((r) => asJSON<Stats>(r)),
+  getStats: (from: string, to: string) => apiFetch<Stats>(`/api/stats?from=${from}&to=${to}`),
 
   addMeal: (date: string, name: string) =>
-    fetch("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }).then((r) => asJSON<Day>(r)),
+    apiFetch<Day>("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }),
 
   updateMeal: (date: string, id: number, name: string, note: string) =>
-    fetch(`/api/meals/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, name, note }) }).then((r) => asJSON<Day>(r)),
+    apiFetch<Day>(`/api/meals/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, name, note }) }),
 
-  deleteMeal: (date: string, id: number) =>
-    fetch(`/api/meals/${id}?date=${date}`, { method: "DELETE" }).then((r) => asJSON<Day>(r)),
+  deleteMeal: (date: string, id: number) => apiFetch<Day>(`/api/meals/${id}?date=${date}`, { method: "DELETE" }),
 
   addEntry: (body: {
     date: string;
@@ -41,26 +31,24 @@ export const api = {
     carb: number;
     protein: number;
     fat: number;
-  }) => fetch("/api/entries", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then((r) => asJSON<Day>(r)),
+  }) => apiFetch<Day>("/api/entries", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }),
 
   updateEntry: (
     date: string,
     id: number,
     body: { name: string; quantity: number; unit: string; kcal: number; carb: number; protein: number; fat: number },
-  ) => fetch(`/api/entries/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, ...body }) }).then((r) => asJSON<Day>(r)),
+  ) => apiFetch<Day>(`/api/entries/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, ...body }) }),
 
-  deleteEntry: (date: string, id: number) =>
-    fetch(`/api/entries/${id}?date=${date}`, { method: "DELETE" }).then((r) => asJSON<Day>(r)),
+  deleteEntry: (date: string, id: number) => apiFetch<Day>(`/api/entries/${id}?date=${date}`, { method: "DELETE" }),
 
-  getProfile: () => fetch("/api/profile").then((r) => asJSON<Profile>(r)),
+  getProfile: () => apiFetch<Profile>("/api/profile"),
 
   saveProfile: (body: { name: string; kcal: number; carb: number; protein: number; fat: number; shared: boolean }) =>
-    fetch("/api/profile", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body) }).then((r) => asJSON<Profile>(r)),
+    apiFetch<Profile>("/api/profile", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body) }),
 
   // public, read-only (shared profiles)
-  getShared: (uuid: string) => fetch(`/api/shared/${uuid}`).then((r) => asJSON<Profile>(r)),
-  getSharedDay: (uuid: string, date: string) => fetch(`/api/shared/${uuid}/day?date=${date}`).then((r) => asJSON<Day>(r)),
-  getSharedStats: (uuid: string, from: string, to: string) =>
-    fetch(`/api/shared/${uuid}/stats?from=${from}&to=${to}`).then((r) => asJSON<Stats>(r)),
-  getSharedDays: (uuid: string) => fetch(`/api/shared/${uuid}/days`).then((r) => asJSON<string[]>(r)),
+  getShared: (uuid: string) => apiFetch<Profile>(`/api/shared/${uuid}`),
+  getSharedDay: (uuid: string, date: string) => apiFetch<Day>(`/api/shared/${uuid}/day?date=${date}`),
+  getSharedStats: (uuid: string, from: string, to: string) => apiFetch<Stats>(`/api/shared/${uuid}/stats?from=${from}&to=${to}`),
+  getSharedDays: (uuid: string) => apiFetch<string[]>(`/api/shared/${uuid}/days`),
 };

@@ -1,0 +1,33 @@
+# Live reload for the dev server: rebuild and restart ./cmd/server whenever a
+# watched file changes. Dev-only — the Docker image runs the compiled binary and
+# never sees this file.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/calories.exe ./cmd/server"
+  entrypoint = ["./tmp/calories.exe"]
+  # .env is watched too, so changing GOOGLE_CLIENT_ID or JWT_SECRET restarts the
+  # server rather than silently leaving the old value loaded.
+  include_ext = ["go", "sql", "env"]
+  include_file = [".env"]
+  # tmp holds the binary air itself writes; db/ and migrations/ are picked up via
+  # include_ext, so only build output and the client are excluded.
+  exclude_dir = ["tmp", "bin"]
+  exclude_regex = ["_test\\.go"]
+  # Wait for a burst of saves to settle before rebuilding (ms).
+  delay = 300
+  # Keep the last error on screen instead of clearing it on the next build.
+  stop_on_error = true
+  # Signal the old process so main.go's graceful shutdown runs. Windows has no
+  # signals, so air falls back to TASKKILL and says so on each restart — that
+  # line is expected, not an error.
+  send_interrupt = true
+  kill_delay = "500ms"
+
+[misc]
+  # Remove tmp/ on exit so a stale binary is never left behind.
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false

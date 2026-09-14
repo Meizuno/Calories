@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView } from "vue-router";
-import { session, login, logout } from "./lib/session";
+import { RouterLink, RouterView, useRouter } from "vue-router";
+import { session, logout } from "./lib/session";
 import { usePullToRefresh } from "./composables/usePullToRefresh";
 
+const router = useRouter();
 const profileName = computed(() => session.profile?.name?.trim() || "");
 const initial = computed(() => (profileName.value ? profileName.value.charAt(0).toUpperCase() : "🙂"));
 
@@ -55,7 +56,7 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
           v-else
           type="button"
           class="rounded-lg bg-emerald-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-emerald-600"
-          @click="login"
+          @click="router.push('/login')"
         >
           Přihlásit
         </button>
