@@ -13,8 +13,15 @@ permissions:
   packages: write
 
 jobs:
+  # Nothing is published or deployed unless the same checks CI runs pass first.
+  # A broken build or a failing auth test now blocks the rollout instead of
+  # reaching production.
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: tests
     steps:
       - name: Checkout
         uses: actions/checkout@v4
