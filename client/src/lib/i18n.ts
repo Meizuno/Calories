@@ -12,6 +12,11 @@ export type Locale = keyof typeof MESSAGES;
 
 export const LOCALE_NAMES: Record<Locale, string> = { cs: "Čeština", en: "English" };
 
+// Flag icons, registered locally in lib/flags.ts (no CDN fetch). The British
+// flag stands in for English — flags belong to countries, not languages, so
+// this is a convention rather than a fact.
+export const LOCALE_FLAGS: Record<Locale, string> = { cs: "i-locale-cs", en: "i-locale-en" };
+
 const COOKIE = "locale";
 const ONE_YEAR = 60 * 60 * 24 * 365;
 

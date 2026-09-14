@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { RouterLink, RouterView, useRouter } from "vue-router";
 import { session, logout } from "./lib/session";
-import { t, currentLocale, setLocale, LOCALE_NAMES, type Locale } from "./lib/i18n";
+import { t, currentLocale, setLocale, LOCALE_NAMES, LOCALE_FLAGS, type Locale } from "./lib/i18n";
 import { cs as uiCs, en as uiEn } from "@nuxt/ui/locale";
 import { usePullToRefresh } from "./composables/usePullToRefresh";
 
@@ -18,9 +18,18 @@ const { distance: pullDistance, pulling: isPulling, ready: pullReady } = usePull
 // Hand Nuxt UI the matching locale so its own components (the calendar, menus)
 // speak the same language as our strings.
 const uiLocale = computed(() => (currentLocale() === "cs" ? uiCs : uiEn));
-// Two languages, so a toggle beats a dropdown. The label shows the language you
-// would switch TO, which is how most two-language switchers read.
-const otherLocale = computed<Locale>(() => (currentLocale() === "cs" ? "en" : "cs"));
+// The picker shows the language currently in use; the menu lists every locale
+// with a tick against the active one.
+const activeLocale = computed(() => currentLocale());
+const localeItems = computed(() =>
+  (Object.keys(LOCALE_NAMES) as Locale[]).map((code) => ({
+    label: LOCALE_NAMES[code],
+    icon: LOCALE_FLAGS[code],
+    type: "checkbox" as const,
+    checked: code === activeLocale.value,
+    onSelect: () => setLocale(code),
+  })),
+);
 </script>
 
 <template>
@@ -35,15 +44,18 @@ const otherLocale = computed<Locale>(() => (currentLocale() === "cs" ? "en" : "c
         </RouterLink>
 
         <div class="flex items-center gap-1">
-        <button
-          type="button"
-          class="rounded-lg px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 transition hover:bg-gray-100 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-          :title="LOCALE_NAMES[otherLocale]"
-          :aria-label="t('nav.language')"
-          @click="setLocale(otherLocale)"
-        >
-          {{ otherLocale }}
-        </button>
+        <UDropdownMenu :items="localeItems" :content="{ align: 'end' }">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :icon="LOCALE_FLAGS[activeLocale]"
+            :label="activeLocale.toUpperCase()"
+            :title="LOCALE_NAMES[activeLocale]"
+            :aria-label="t('nav.language')"
+            class="gap-1.5 text-xs font-semibold tracking-wide text-gray-500 dark:text-gray-400"
+          />
+        </UDropdownMenu>
 
         <nav v-if="session.authenticated" class="flex items-center gap-1">
           <RouterLink
