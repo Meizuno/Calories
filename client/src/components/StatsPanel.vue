@@ -5,11 +5,14 @@ import type { Stats } from "../lib/types";
 import PeriodChart, { type DayBars } from "./PeriodChart.vue";
 import { t, weekdayShort, formatMonth, formatDate } from "../lib/i18n";
 import { useAnimatedNumber } from "../composables/useAnimatedNumber";
+import { useUiSize } from "../composables/useUiSize";
 
 // Reusable stats UI: period stepper + combined %-of-goal bar chart + summary.
 // Data comes from an injected `fetchStats` so the same panel serves both the
 // private stats page and a public shared profile. `gran`/`anchor` are models so
 // the parent can bind them to the URL (StatsView) or leave them local (shared).
+const { inline } = useUiSize();
+
 const props = defineProps<{
   fetchStats: (from: string, to: string) => Promise<Stats>;
   // Optional: dates with data, to disable stepping back past the earliest one.
@@ -159,6 +162,10 @@ function jumpNow() {
   anchor.value = todayISO();
 }
 
+// A period that starts after today has not happened yet: it is drawn so the
+// week or year stays whole, but it is neither openable nor hoverable.
+const isFuture = (start: string) => start > todayISO();
+
 const fmtDM = (iso: string) => formatDate(iso, { day: "numeric", month: "numeric" });
 const capitalise = (v: string) => v.charAt(0).toUpperCase() + v.slice(1);
 const periodLabel = computed(() => {
@@ -228,10 +235,11 @@ const meanOverLogged = (days: DayPoint[], k: Metric) => {
 
 // Turn absolute per-metric values into a bucket of 4 bars, each a percentage of
 // that metric's daily goal — the shared scale that lets kcal + grams coexist.
-function toBars(label: string, logged: boolean, vals: Record<Metric, number>): DayBars {
+function toBars(label: string, logged: boolean, vals: Record<Metric, number>, start: string): DayBars {
   const pct = {} as Record<Metric, number>;
   for (const k of METRIC_KEYS) pct[k] = goals.value[k] > 0 ? (vals[k] / goals.value[k]) * 100 : 0;
-  return { label, logged, raw: { ...vals }, pct };
+  const future = isFuture(start);
+  return { key: future ? undefined : start, label, logged, future, raw: { ...vals }, pct };
 }
 
 // How the window is cut into bars. Week shows each day; anything longer would
@@ -258,7 +266,12 @@ const points = computed<DayBars[]>(() => {
   const days = dailyFilled.value;
   if (bucketing.value === "day") {
     return days.map((d) =>
-      toBars(weekdayShort(d.date), d.logged, { kcal: d.kcal, carb: d.carb, protein: d.protein, fat: d.fat }),
+      toBars(
+        weekdayShort(d.date),
+        d.logged,
+        { kcal: d.kcal, carb: d.carb, protein: d.protein, fat: d.fat },
+        d.date,
+      ),
     );
   }
 
@@ -277,12 +290,19 @@ const points = computed<DayBars[]>(() => {
         bucketing.value === "month"
           ? formatDate(group[0].date, { month: "short" })
           : `${dayOfMonth(group[0].date)}.–${dayOfMonth(group[group.length - 1].date)}.`;
-      return toBars(label, group.some((d) => d.logged), {
-        kcal: meanOverLogged(group, "kcal"),
-        carb: meanOverLogged(group, "carb"),
-        protein: meanOverLogged(group, "protein"),
-        fat: meanOverLogged(group, "fat"),
-      });
+      return toBars(
+        label,
+        group.some((d) => d.logged),
+        {
+          kcal: meanOverLogged(group, "kcal"),
+          carb: meanOverLogged(group, "carb"),
+          protein: meanOverLogged(group, "protein"),
+          fat: meanOverLogged(group, "fat"),
+        },
+        // A week or month is reachable once it has started, even if it runs
+        // past today — the period view itself caps what it shows.
+        group[0].date,
+      );
     });
 });
 
@@ -299,6 +319,25 @@ const summary = computed(() => {
     fat: meanOverLogged(days, "fat"),
   };
 });
+
+const emit = defineEmits<{ (e: "pick-day", date: string): void }>();
+
+function drillInto(point: DayBars) {
+  if (!point.key) return;
+  switch (bucketing.value) {
+    case "day":
+      emit("pick-day", point.key);
+      break;
+    case "week":
+      gran.value = "week";
+      anchor.value = point.key;
+      break;
+    case "month":
+      gran.value = "month";
+      anchor.value = point.key;
+      break;
+  }
+}
 
 const GRANS = computed(() => [
   { key: "week" as Gran, label: t("stats.week") },
@@ -329,6 +368,19 @@ const SUMMARY = computed(() => [
   { key: "protein" as Metric, label: t("macros.protein"), unit: "g", color: "#10b981" },
   { key: "fat" as Metric, label: t("macros.fat"), unit: "g", color: "#f59e0b" },
 ]);
+// What a click on a bar does, which changes with the bucket and which nothing
+// about a bar chart otherwise advertises.
+const drillHint = computed(() => {
+  switch (bucketing.value) {
+    case "day":
+      return t("stats.hintDay");
+    case "week":
+      return t("stats.hintWeek");
+    default:
+      return t("stats.hintMonth");
+  }
+});
+
 const avgLabel = computed(() => {
   switch (bucketing.value) {
     case "day":
@@ -364,7 +416,7 @@ const goalPct = (key: Metric) =>
           v-for="g in GRANS"
           :key="g.key"
           type="button"
-          class="rounded-lg px-2.5 py-1.5 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+          class="rounded-lg px-2.5 py-1.5 text-sm font-medium outline-none transition focus-visible:ring-2 focus-visible:ring-emerald-500/60 sm:px-3 sm:py-2 sm:text-base"
           :class="gran === g.key
             ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-800 dark:text-gray-100'
             : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'"
@@ -374,7 +426,7 @@ const goalPct = (key: Metric) =>
 
       <div class="ml-auto flex items-center gap-1">
         <UButton
-          size="xs"
+          :size="inline"
           color="neutral"
           variant="ghost"
           icon="i-ui-prev"
@@ -404,7 +456,7 @@ const goalPct = (key: Metric) =>
         <span v-else class="min-w-40 px-1 text-center text-sm font-semibold tabular-nums sm:text-base">{{ periodLabel }}</span>
 
         <UButton
-          size="xs"
+          :size="inline"
           color="neutral"
           variant="ghost"
           icon="i-ui-next"
@@ -414,7 +466,7 @@ const goalPct = (key: Metric) =>
         />
         <UButton
           class="ml-1"
-          size="xs"
+          :size="inline"
           color="neutral"
           variant="soft"
           :label="t('stats.jumpNow')"
@@ -462,7 +514,8 @@ const goalPct = (key: Metric) =>
             {{ t("stats.loggedDays", { n: summary.loggedCount, total: summary.totalDays }) }}
           </span>
         </div>
-        <PeriodChart :points="points" />
+        <PeriodChart :points="points" interactive @select="drillInto" />
+        <p class="mt-2 text-center text-xs text-gray-400">{{ drillHint }}</p>
       </template>
     </UCard>
   </div>

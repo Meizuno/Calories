@@ -6,8 +6,10 @@ import { session, loadSession, changePassword } from "../lib/session";
 import { ApiError } from "../lib/http";
 import { t } from "../lib/i18n";
 import type { Profile } from "../lib/types";
+import { useUiSize } from "../composables/useUiSize";
 
 const router = useRouter();
+const { control } = useUiSize();
 const profile = ref<Profile | null>(null);
 const form = ref({ name: "", kcal: "0", carb: "0", protein: "0", fat: "0", shared: false });
 const saving = ref(false);
@@ -93,7 +95,7 @@ async function copyShare() {
       <form class="space-y-4" @submit.prevent="save">
         <label class="block">
           <span class="mb-1 block text-xs text-gray-500">{{ t("profile.name") }}</span>
-          <UInput v-model="form.name" :placeholder="t('auth.namePlaceholder')" />
+          <UInput v-model="form.name" :size="control" class="w-full" :placeholder="t('auth.namePlaceholder')" />
         </label>
 
         <div>
@@ -101,19 +103,19 @@ async function copyShare() {
           <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <label class="flex flex-col gap-1 text-xs text-gray-500">
               kcal
-              <UInput v-model="form.kcal" type="number" step="any" min="0" />
+              <UInput v-model="form.kcal" type="number" step="any" min="0" :size="control" class="w-full" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
               {{ t("macros.carb") }} (g)
-              <UInput v-model="form.carb" type="number" step="any" min="0" />
+              <UInput v-model="form.carb" type="number" step="any" min="0" :size="control" class="w-full" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
               {{ t("macros.protein") }} (g)
-              <UInput v-model="form.protein" type="number" step="any" min="0" />
+              <UInput v-model="form.protein" type="number" step="any" min="0" :size="control" class="w-full" />
             </label>
             <label class="flex flex-col gap-1 text-xs text-gray-500">
               {{ t("macros.fat") }} (g)
-              <UInput v-model="form.fat" type="number" step="any" min="0" />
+              <UInput v-model="form.fat" type="number" step="any" min="0" :size="control" class="w-full" />
             </label>
           </div>
         </div>
@@ -123,16 +125,16 @@ async function copyShare() {
             <div class="text-sm font-medium">{{ t("profile.shared") }}</div>
             <div class="text-xs text-gray-500">{{ t("profile.sharedHint") }}</div>
           </div>
-          <USwitch v-model="form.shared" />
+          <USwitch v-model="form.shared" :size="control" />
         </div>
 
         <div v-if="shareUrl" class="flex items-center gap-2">
-          <UInput :model-value="shareUrl" readonly class="flex-1" />
-          <UButton color="neutral" variant="soft" :label="t('common.copy')" @click="copyShare" />
+          <UInput :model-value="shareUrl" readonly :size="control" class="flex-1" />
+          <UButton color="neutral" variant="soft" :size="control" :label="t('common.copy')" @click="copyShare" />
         </div>
 
         <div class="flex justify-end">
-          <UButton type="submit" :loading="saving" :label="isOnboarding ? t('profile.continue') : t('common.save')" />
+          <UButton type="submit" :size="control" :loading="saving" :label="isOnboarding ? t('profile.continue') : t('common.save')" />
         </div>
       </form>
     </UCard>
@@ -159,15 +161,15 @@ async function copyShare() {
 
           <label v-if="hasPassword" class="block">
             <span class="mb-1 block text-xs text-gray-500">{{ t("profile.currentPassword") }}</span>
-            <UInput v-model="pw.current" type="password" autocomplete="current-password" />
+            <UInput v-model="pw.current" type="password" autocomplete="current-password" :size="control" class="w-full" />
           </label>
           <label class="block">
             <span class="mb-1 block text-xs text-gray-500">{{ hasPassword ? t("profile.newPassword") : t("profile.setPassword") }}</span>
-            <UInput v-model="pw.next" type="password" autocomplete="new-password" :placeholder="t('auth.passwordMin')" />
+            <UInput v-model="pw.next" type="password" autocomplete="new-password" :size="control" class="w-full" :placeholder="t('auth.passwordMin')" />
           </label>
 
           <div class="flex justify-end">
-            <UButton type="submit" color="neutral" variant="soft" :loading="pwBusy" :label="hasPassword ? t('profile.changePassword') : t('profile.setPassword')" />
+            <UButton type="submit" color="neutral" variant="soft" :size="control" :loading="pwBusy" :label="hasPassword ? t('profile.changePassword') : t('profile.setPassword')" />
           </div>
         </form>
       </div>

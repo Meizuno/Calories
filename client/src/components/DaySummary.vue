@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed } from "vue";
 import type { Day } from "../lib/types";
 import RingChart from "./RingChart.vue";
 import { useAnimatedNumber, useReveal } from "../composables/useAnimatedNumber";
+import { useMediaQuery } from "../composables/useMediaQuery";
 import MacroBars from "./MacroBars.vue";
 import { t } from "../lib/i18n";
 
@@ -28,16 +29,9 @@ const shownRemaining = computed(() => remaining.value * reveal.value);
 const shownEaten = computed(() => eaten.value * reveal.value);
 const over = computed(() => props.day.eaten.kcal > props.day.target.kcal);
 
-// Smaller ring on phones, full size from the `sm` breakpoint up.
-const wide = ref(false);
-let mq: MediaQueryList | undefined;
-const sync = () => (wide.value = !!mq?.matches);
-onMounted(() => {
-  mq = window.matchMedia("(min-width: 640px)");
-  sync();
-  mq.addEventListener("change", sync);
-});
-onUnmounted(() => mq?.removeEventListener("change", sync));
+// Smaller ring on phones, full size from the `sm` breakpoint up — the same
+// breakpoint the Nuxt UI controls step at, so the card grows as one piece.
+const wide = useMediaQuery("(min-width: 640px)");
 </script>
 
 <template>

@@ -17,8 +17,20 @@ function todayISO() {
 // bound into StatsPanel's models (no two-way-sync loop).
 const route = useRoute();
 const router = useRouter();
+// Drilling into a bucket changes the period type AND the anchor date. Those are
+// two separate writable computeds, so writing them in turn produced two
+// router.replace calls — and the first landed on the new type with the OLD
+// date, which showed as a visible jump to the wrong period before settling.
+// Collecting writes made in the same tick keeps it to a single navigation.
+let pending: Record<string, string> | null = null;
 function setQuery(patch: Record<string, string>) {
-  router.replace({ query: { ...route.query, ...patch } });
+  pending = { ...(pending ?? {}), ...patch };
+  queueMicrotask(() => {
+    if (!pending) return;
+    const query = { ...route.query, ...pending };
+    pending = null;
+    router.replace({ query });
+  });
 }
 type Gran = "week" | "month" | "year" | "custom";
 const GRANS: Gran[] = ["week", "month", "year", "custom"];
@@ -50,6 +62,9 @@ const anchor = computed<string>({
 });
 
 const fetchStats = (from: string, to: string) => api.getStats(from, to);
+// The chart's day level has nowhere further to zoom, so it leaves statistics
+// and opens that day in the diary.
+const openDay = (d: string) => router.push({ path: "/", query: { date: d } });
 const fetchDays = () => api.getDays();
 </script>
 
@@ -61,6 +76,7 @@ const fetchDays = () => api.getDays();
     v-model:to="to"
     :fetch-stats="fetchStats"
     :fetch-days="fetchDays"
+    @pick-day="openDay"
   >
     <template #title>
       <h1 class="text-lg font-semibold sm:text-xl">{{ t("nav.stats") }}</h1>
