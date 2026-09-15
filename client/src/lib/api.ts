@@ -21,6 +21,11 @@ export const api = {
 
   deleteMeal: (date: string, id: number) => apiFetch<Day>(`/api/meals/${id}?date=${date}`, { method: "DELETE" }),
 
+  // Duplicate a meal (entries and all) onto `toDate`. Resolves with THAT day,
+  // not the one the meal came from.
+  copyMeal: (id: number, toDate: string) =>
+    apiFetch<Day>(`/api/meals/${id}/copy`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date: toDate }) }),
+
   addEntry: (body: {
     date: string;
     mealId: number;

@@ -119,6 +119,59 @@ func (s *Diary) LogMeal(ctx context.Context, profileID int64, date time.Time, na
 	return meal.ID, nil
 }
 
+// CopyMeal duplicates a meal and its entries onto another date, appended to the
+// end of that day. It is the "I eat the same breakfast most mornings" path:
+// repeating a meal rather than retyping every line of it.
+//
+// Macros are copied verbatim rather than recomputed from the catalog. An entry
+// already snapshots what was actually eaten, and a repeat is the same food —
+// re-deriving it would silently rewrite history if the food has been edited
+// since. food_id rides along so the line keeps whatever provenance it had.
+//
+// Returns the new meal's id. The source meal is verified to belong to the
+// profile, so a guessed id copies nothing.
+func (s *Diary) CopyMeal(ctx context.Context, profileID, mealID int64, to time.Time) (int64, error) {
+	src, err := s.q.GetMealForProfile(ctx, db.GetMealForProfileParams{ID: mealID, ProfileID: profileID})
+	if err != nil {
+		return 0, err
+	}
+	entries, err := s.q.ListEntriesForMeal(ctx, mealID)
+	if err != nil {
+		return 0, err
+	}
+	pos, err := s.q.MaxMealPosition(ctx, db.MaxMealPositionParams{ProfileID: profileID, Date: to})
+	if err != nil {
+		return 0, err
+	}
+	dst, err := s.q.CreateMeal(ctx, db.CreateMealParams{
+		ProfileID: profileID,
+		Date:      to,
+		Name:      src.Name,
+		Position:  pos + 1,
+		Note:      src.Note,
+	})
+	if err != nil {
+		return 0, err
+	}
+	for i, e := range entries {
+		if _, err := s.q.CreateEntry(ctx, db.CreateEntryParams{
+			MealID:   dst.ID,
+			FoodID:   e.FoodID,
+			Name:     e.Name,
+			Quantity: e.Quantity,
+			Unit:     e.Unit,
+			Position: int32(i + 1),
+			Kcal:     e.Kcal,
+			Carb:     e.Carb,
+			Protein:  e.Protein,
+			Fat:      e.Fat,
+		}); err != nil {
+			return dst.ID, err
+		}
+	}
+	return dst.ID, nil
+}
+
 // ListDays returns the distinct dates that have at least one logged entry — used
 // by the client to mark which calendar days are navigable.
 func (s *Diary) ListDays(ctx context.Context, profileID int64) ([]time.Time, error) {

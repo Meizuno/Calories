@@ -83,6 +83,10 @@ export default {
     confirmDeleteMeal: "Smazat jídlo i s položkami?",
     confirmDeleteEntry: "Smazat položku?",
     entryNamePlaceholder: "Název",
+    copyToToday: "Kopírovat do dneška",
+    copied: "Zkopírováno",
+    undoCopyHint: "Zkopírováno do dneška — klepnutím vrátit zpět",
+    copyFailed: "Nezkopírováno",
   },
   log: {
     back: "Deník",

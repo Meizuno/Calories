@@ -4,6 +4,9 @@ JOIN meals m ON m.id = e.meal_id
 WHERE m.profile_id = $1 AND m.date = $2
 ORDER BY e.meal_id, e.position, e.id;
 
+-- name: ListEntriesForMeal :many
+SELECT * FROM entries WHERE meal_id = $1 ORDER BY position, id;
+
 -- name: MaxEntryPosition :one
 SELECT COALESCE(MAX(position), -1)::int AS pos FROM entries WHERE meal_id = $1;
 
