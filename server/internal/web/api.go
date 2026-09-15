@@ -182,6 +182,10 @@ func (h *Handlers) AddEntry(w http.ResponseWriter, r *http.Request) {
 	if req.MealID > 0 && name != "" && req.Quantity > 0 {
 		_ = h.diary.AddAdhocEntry(r.Context(), pid, req.MealID, name, req.Unit,
 			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
+		// Logging an item is also how the app learns the food. Best effort: a
+		// failed memory must never cost someone the entry they just logged.
+		_ = h.catalog.Remember(r.Context(), pid, name, req.Unit,
+			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
 	}
 	h.respondDay(w, r, pid, date)
 }
@@ -211,6 +215,10 @@ func (h *Handlers) UpdateEntry(w http.ResponseWriter, r *http.Request) {
 	pid := ProfileID(r.Context())
 	if name := strings.TrimSpace(req.Name); name != "" && req.Quantity > 0 {
 		_ = h.diary.UpdateEntry(r.Context(), pid, idParam(r), name, req.Unit,
+			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
+		// Correcting a line corrects what we remember about the food too, which
+		// is how a wrong value gets fixed for every suggestion that follows.
+		_ = h.catalog.Remember(r.Context(), pid, name, req.Unit,
 			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
 	}
 	h.respondDay(w, r, pid, parseDate(req.Date))

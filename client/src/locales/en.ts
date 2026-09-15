@@ -104,6 +104,8 @@ const en: typeof cs = {
     added: "Added: {name}",
     fromMacros: "≈ {n} from macros",
     pickMeal: "Which meal",
+    forgetFood: "Forget this food",
+    scaledFrom: "Scaled from “{name}” ({kcal} kcal / {amount} {unit})",
   },
   profile: {
     onboardingHint: "Welcome! Before you start, please fill in your profile and daily goal.",

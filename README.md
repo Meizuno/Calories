@@ -98,13 +98,21 @@ TEST_DATABASE_URL='postgres://user:pass@localhost:5432/calories_test?sslmode=dis
 
 ## Client
 
-Vue 3 SPA (Nuxt UI). Routes: `/` welcome (public), `/login` sign-in & sign-up
-(public), `/diary` the day (kcal ring +
-per-macro bars, free-text add/edit-item form, meal accordion with inline rename,
-row editing & copy-this-meal-to-today), `/catalog` the food catalog, `/profiles/me` own profile (also the
-first-run onboarding form), and `/profile/:uuid` a public read-only view of a
-*shared* profile's diary. Charts are dependency-free SVG (`components/RingChart.vue`,
-`MacroBars.vue`).
+Vue 3 SPA (Nuxt UI). Routes: `/` the day when signed in and a welcome screen
+when not (kcal ring + per-macro bars, day stepper, last-7-days trend, meal
+accordion with inline rename, row editing & copy-this-meal-to-today), `/login`
+sign-in & sign-up (public, rendered on a bare centred shell with no header),
+`/log` add an item or a meal, `/stats` week/month/year/custom periods with
+drill-down into the period below, `/profiles/me` own profile (also the first-run
+onboarding form), and `/profile/:uuid` a public read-only view of a *shared*
+profile. Charts are dependency-free SVG (`components/RingChart.vue`,
+`MacroBars.vue`, `PeriodChart.vue`, `WeekTrend.vue`).
+
+Logging an item also remembers the food: macros are stored per 100 g (or per 1
+for counted units) in `foods`, and typing a name on `/log` offers what has been
+logged before, scaled to whatever quantity is being eaten. Entries keep their own
+macro snapshot, so correcting a food never rewrites what past days say was
+eaten.
 
 The SPA bootstraps from `GET /api/session` (authenticated? which account? which
 profile? is Google sign-in available?). Every API call goes through `lib/http.ts`:

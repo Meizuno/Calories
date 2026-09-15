@@ -32,6 +32,15 @@ export interface Day {
   meals: Meal[];
 }
 
+// A food the app has remembered, with its macros held per `basisAmount` of
+// `basisUnit` (100 g, 1 ks, ...) so any quantity can be scaled from them.
+export interface Food extends Macros {
+  id: number;
+  name: string;
+  basisUnit: string;
+  basisAmount: number;
+}
+
 // The account behind the session (distinct from the Profile, which holds the
 // diary's goal and sharing settings).
 export interface SessionUser {

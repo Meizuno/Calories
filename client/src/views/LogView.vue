@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { api } from "../lib/api";
-import type { Day } from "../lib/types";
+import type { Day, Food } from "../lib/types";
 import { t, weekdayShort } from "../lib/i18n";
 import { useUiSize } from "../composables/useUiSize";
 
@@ -42,6 +42,82 @@ watch(date, reload, { immediate: true });
 const hasMeals = computed(() => (day.value?.meals.length ?? 0) > 0);
 const numVal = (s: string) => Math.max(0, parseFloat(s) || 0);
 const k = (n: number) => Math.round(n);
+const g = (n: number) => Math.round(n * 10) / 10;
+
+// ── remembered foods ─────────────────────────────────────────────────────────
+// Everything logged is remembered, so the second time you eat something you
+// pick it and give a quantity instead of retyping four macro fields. Held per
+// basis (100 g, 1 ks) on the server, scaled here to whatever is being eaten.
+const foods = ref<Food[]>([]);
+// The food the macro fields currently come from. Set by picking a suggestion,
+// cleared the moment anything is typed over them by hand — a value someone
+// corrected must never be silently recomputed away.
+const linked = ref<Food | null>(null);
+const suggestOpen = ref(false);
+
+async function loadFoods() {
+  try {
+    foods.value = await api.getFoods();
+  } catch {
+    /* non-fatal: suggestions are a convenience, the form still works */
+  }
+}
+loadFoods();
+
+// Match without diacritics, so "banan" finds "Banán" — the accents are the
+// first thing anyone skips when typing quickly.
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+
+const suggestions = computed(() => {
+  const q = fold(entry.value.name.trim());
+  const pool = q ? foods.value.filter((f) => fold(f.name).includes(q)) : foods.value;
+  return pool.slice(0, 6);
+});
+
+// Rewrite the macro fields for the current quantity of the linked food.
+function rescale() {
+  const f = linked.value;
+  if (!f) return;
+  const q = numVal(entry.value.quantity);
+  if (q <= 0 || f.basisAmount <= 0) return;
+  const factor = q / f.basisAmount;
+  entry.value.kcal = String(Math.round(f.kcal * factor));
+  entry.value.carb = String(g(f.carb * factor));
+  entry.value.protein = String(g(f.protein * factor));
+  entry.value.fat = String(g(f.fat * factor));
+}
+
+function pickFood(f: Food) {
+  linked.value = f;
+  entry.value.name = f.name;
+  entry.value.unit = f.basisUnit;
+  // An empty quantity becomes the basis itself: "100 g" is the commonest thing
+  // to want, and it gives the macro fields something to scale from.
+  if (numVal(entry.value.quantity) <= 0) entry.value.quantity = String(f.basisAmount);
+  rescale();
+  suggestOpen.value = false;
+}
+
+// Typing over the name, the unit or any macro means the line is no longer that
+// remembered food, so it stops being rescaled.
+const unlink = () => (linked.value = null);
+watch(() => entry.value.quantity, rescale);
+watch(() => entry.value.unit, () => {
+  if (linked.value && entry.value.unit !== linked.value.basisUnit) unlink();
+});
+
+async function forgetFood(f: Food) {
+  if (linked.value?.id === f.id) unlink();
+  try {
+    foods.value = await api.forgetFood(f.id);
+  } catch {
+    /* leave the list as it is; nothing was lost from the diary */
+  }
+}
 
 // kcal implied by the macros (4/4/9 per gram). Offered as a one-tap fill rather
 // than written automatically: packaging often disagrees slightly with the
@@ -95,6 +171,9 @@ async function addEntry() {
   const unit = entry.value.unit;
   entry.value = { name: "", quantity: "", unit, kcal: "", carb: "", protein: "", fat: "" };
   noteAdded(name);
+  unlink();
+  // The line just logged is now remembered (or corrected), so pick that up.
+  loadFoods();
 }
 </script>
 
@@ -148,9 +227,45 @@ async function addEntry() {
         </div>
 
         <div class="grid gap-3 sm:grid-cols-[1fr_7rem_7rem]">
-          <label class="flex flex-col gap-1 text-xs text-gray-500">
+          <label class="relative flex flex-col gap-1 text-xs text-gray-500">
             {{ t("common.name") }}
-            <UInput v-model="entry.name" :size="control" class="w-full" :placeholder="t('log.foodPlaceholder')" />
+            <UInput
+              v-model="entry.name"
+              :size="control"
+              class="w-full"
+              autocomplete="off"
+              :placeholder="t('log.foodPlaceholder')"
+              @update:model-value="unlink"
+              @focus="suggestOpen = true"
+              @blur="suggestOpen = false"
+            />
+            <!-- Remembered foods, filtered by what has been typed. mousedown is
+                 prevented so choosing one does not blur the field and close the
+                 list before the click lands. -->
+            <ul
+              v-if="suggestOpen && suggestions.length"
+              class="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
+            >
+              <li v-for="f in suggestions" :key="f.id" class="flex items-stretch">
+                <button
+                  type="button"
+                  class="flex min-w-0 flex-1 items-baseline gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                  @mousedown.prevent="pickFood(f)"
+                >
+                  <span class="truncate text-gray-900 dark:text-gray-100">{{ f.name }}</span>
+                  <span class="ml-auto shrink-0 tabular-nums text-xs text-gray-400">
+                    {{ k(f.kcal) }} kcal / {{ g(f.basisAmount) }} {{ f.basisUnit }}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="px-2 text-gray-300 transition-colors hover:text-red-500 dark:text-gray-600"
+                  :title="t('log.forgetFood')"
+                  :aria-label="t('log.forgetFood')"
+                  @mousedown.prevent="forgetFood(f)"
+                >✕</button>
+              </li>
+            </ul>
           </label>
           <label class="flex flex-col gap-1 text-xs text-gray-500">
             {{ t("common.quantity") }}
@@ -162,22 +277,26 @@ async function addEntry() {
           </label>
         </div>
 
+        <p v-if="linked" class="-mb-1 text-xs text-gray-400">
+          {{ t("log.scaledFrom", { name: linked.name, kcal: k(linked.kcal), amount: g(linked.basisAmount), unit: linked.basisUnit }) }}
+        </p>
+
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label class="flex flex-col gap-1 text-xs text-gray-500">
             kcal
-            <UInput v-model="entry.kcal" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" />
+            <UInput v-model="entry.kcal" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" @update:model-value="unlink" />
           </label>
           <label class="flex flex-col gap-1 text-xs text-sky-500">
             {{ t("macros.carbShort") }}.
-            <UInput v-model="entry.carb" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" />
+            <UInput v-model="entry.carb" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" @update:model-value="unlink" />
           </label>
           <label class="flex flex-col gap-1 text-xs text-emerald-500">
             {{ t("macros.proteinShort") }}.
-            <UInput v-model="entry.protein" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" />
+            <UInput v-model="entry.protein" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" @update:model-value="unlink" />
           </label>
           <label class="flex flex-col gap-1 text-xs text-amber-500">
             {{ t("macros.fatShort") }}
-            <UInput v-model="entry.fat" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" />
+            <UInput v-model="entry.fat" type="number" step="any" min="0" inputmode="decimal" :size="control" class="w-full" placeholder="0" @update:model-value="unlink" />
           </label>
         </div>
 
