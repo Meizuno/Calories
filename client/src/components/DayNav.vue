@@ -55,7 +55,16 @@ function pickDate(value: DateValue | undefined) {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+  <!-- One line, always. It used to wrap, and in the diary's 21rem sidebar the
+       date and its arrows came to within a few pixels of the full width, so
+       Today and the calendar dropped onto a second row — a two-line control
+       above a card that is otherwise tightly packed.
+       @container rather than a breakpoint: this sits in a wide header on one
+       page and a narrow column on another, both on the same large screen, so
+       the viewport says nothing useful about how much room it actually has.
+       The date takes the full size where it fits and one step down where it
+       does not, which is the ~20px that made the difference. -->
+  <div class="@container flex items-center gap-x-2">
     <div class="flex min-w-0 items-center gap-0.5">
       <UButton
         :size="inline"
@@ -65,7 +74,10 @@ function pickDate(value: DateValue | undefined) {
         :aria-label="t('common.previous')"
         @click="go(shift(date, -1))"
       />
-      <span class="truncate px-1 text-base font-semibold tabular-nums">
+      <!-- truncate is the floor, not the plan: at any width the two groups fit
+           by the numbers, but a longer locale or a bigger root font should cost
+           the tail of a date rather than the layout. -->
+      <span class="truncate px-1 text-sm font-semibold tabular-nums @xs:text-base">
         {{ date }} <span class="font-normal text-gray-400">({{ weekday(date) }})</span>
       </span>
       <UButton
@@ -79,7 +91,7 @@ function pickDate(value: DateValue | undefined) {
       />
     </div>
 
-    <div class="ml-auto flex items-center gap-1">
+    <div class="ml-auto flex shrink-0 items-center gap-1">
       <UButton
         :size="inline"
         color="neutral"

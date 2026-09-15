@@ -191,8 +191,8 @@ async function onUpdateEntry(
       <aside class="order-1 xl:order-2 xl:sticky xl:top-20">
         <DaySummary :day="day" sidebar>
           <!-- Day selection sits with the day it describes, so in the sticky
-               column it stays reachable while the meals scroll. Wraps to a
-               second line in the narrow sidebar. -->
+               column it stays reachable while the meals scroll. It sizes itself
+               to this column rather than to the screen. -->
           <template #header>
             <DayNav :date="date" :days="days" @update:date="goto" />
           </template>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Meizuno/calories/config"
+	"github.com/Meizuno/calories/internal/assistant"
 	"github.com/Meizuno/calories/internal/ratelimit"
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store"
@@ -62,7 +64,12 @@ func main() {
 		slog.Info("registration closed (set ALLOW_REGISTRATION=true to open it)")
 	}
 	auth := web.NewAuth(authsvc, cfg.SecureCookies)
-	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, authsvc, google, cfg.GoogleAllowedEmails, cfg.AllowRegistration)
+
+	// The assistant is off unless a deployment opts in, because every message it
+	// answers costs money. "mock" is the exception: it answers without calling
+	// anyone, so the chat can be built and demonstrated for nothing.
+	chat := buildAssistant(cfg, diary, catalog)
+	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, authsvc, google, cfg.GoogleAllowedEmails, cfg.AllowRegistration, chat)
 	gate := web.NewGate(auth, profiles, tokens)
 
 	// Rate limits, built once and shared: the auth routes are mounted at both
@@ -71,8 +78,10 @@ func main() {
 	// rotating a session is ordinary traffic, and several tabs waking together
 	// must not lock someone out of their own app.
 	limits := web.Limits{
-		Auth:       ratelimit.New(cfg.AuthRateLimit, cfg.AuthRateWindow),
-		Refresh:    ratelimit.New(cfg.AuthRateLimit*6, cfg.AuthRateWindow),
+		Auth:    ratelimit.New(cfg.AuthRateLimit, cfg.AuthRateWindow),
+		Refresh: ratelimit.New(cfg.AuthRateLimit*6, cfg.AuthRateWindow),
+		// Keyed by profile rather than address: the bill follows the account.
+		Assistant:  ratelimit.New(cfg.AssistantRateLimit, cfg.AssistantRateWindow),
 		TrustProxy: cfg.TrustProxy,
 	}
 	slog.Info("auth rate limit",
@@ -141,4 +150,24 @@ func runHealthcheck() int {
 	}
 	slog.Error("healthcheck", "status", resp.StatusCode)
 	return 1
+}
+
+// buildAssistant picks the model behind the in-app chat, or none at all.
+//
+// A misconfiguration is fatal rather than silent: a deployment that meant to
+// enable the assistant and instead ran without one would look fine until the
+// first person asked it a question.
+func buildAssistant(cfg config.Config, diary *service.Diary, catalog *service.Catalog) *assistant.Service {
+	tools := assistant.Tools(diary, catalog)
+	switch cfg.Assistant {
+	case "":
+		slog.Info("assistant disabled (set ASSISTANT=mock to try it without a key)")
+		return nil
+	case "mock":
+		slog.Warn("assistant running on the MOCK provider - replies are canned, no model is called")
+		return assistant.New(&assistant.MockProvider{Delay: 25 * time.Millisecond}, tools...)
+	default:
+		fatal("assistant", fmt.Errorf("unknown ASSISTANT %q (known: mock)", cfg.Assistant))
+		return nil
+	}
 }

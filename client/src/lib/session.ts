@@ -9,6 +9,8 @@ interface SessionState {
   authenticated: boolean;
   user: SessionUser | null;
   profile: Profile | null;
+  /** Whether this deployment has an assistant configured. */
+  assistant: boolean;
   /** Whether this deployment has Google sign-in configured. */
   google: boolean;
   /** Whether self-service sign-up is open (ALLOW_REGISTRATION on the server). */
@@ -19,6 +21,7 @@ interface SessionResponse {
   authenticated: boolean;
   google?: boolean;
   registration?: boolean;
+  assistant?: boolean;
   user?: SessionUser;
   profile?: Profile;
 }
@@ -36,6 +39,7 @@ export const session = reactive<SessionState>({
   profile: null,
   google: false,
   registration: false,
+  assistant: false,
 });
 
 function adopt(d: SessionResponse) {
@@ -44,6 +48,7 @@ function adopt(d: SessionResponse) {
   session.profile = d.profile ?? null;
   if (typeof d.google === "boolean") session.google = d.google;
   if (typeof d.registration === "boolean") session.registration = d.registration;
+  if (typeof d.assistant === "boolean") session.assistant = d.assistant;
   session.loaded = true;
 }
 

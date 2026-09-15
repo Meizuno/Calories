@@ -22,6 +22,10 @@ type Limits struct {
 	// Refresh is far more generous: rotating a session is normal traffic, and
 	// several tabs waking at once must not lock someone out of their own app.
 	Refresh *ratelimit.Limiter
+	// Assistant caps chat messages. Unlike the others this is keyed by profile,
+	// not by address: the cost follows the account, and one person on a shared
+	// network must not exhaust another's allowance.
+	Assistant *ratelimit.Limiter
 	// TrustProxy says whether X-Forwarded-For may be believed. See clientIP.
 	TrustProxy bool
 }
@@ -73,6 +77,29 @@ func limit(l *ratelimit.Limiter, trustProxy bool) func(http.Handler) http.Handle
 				w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retry.Seconds()))))
 				writeError(w, http.StatusTooManyRequests, "too_many_requests",
 					"too many attempts — wait a moment and try again")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// limitByProfile counts against the signed-in account rather than the address.
+// It must be mounted INSIDE the gate, which is what puts the profile in the
+// context; before it, every caller would share the empty key.
+func limitByProfile(l *ratelimit.Limiter) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if l == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			ok, retry := l.Allow(strconv.FormatInt(ProfileID(r.Context()), 10))
+			if !ok {
+				drain(r)
+				w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retry.Seconds()))))
+				writeError(w, http.StatusTooManyRequests, "too_many_requests",
+					"you have used this hour's messages -- try again shortly")
 				return
 			}
 			next.ServeHTTP(w, r)
