@@ -160,7 +160,7 @@ cheerful 200 with an unchanged day.
 ```
 400 invalid_date   invalid_body   name_required   invalid_entry
 401 unauthorized   403 forbidden  pat_required
-404 not_found      500 internal
+404 not_found      429 too_many_requests    500 internal
 ```
 
 `not_found` covers both "no such row" and "not yours" on purpose — telling those
@@ -273,6 +273,28 @@ with no email verification, anyone could register an address before its real
 owner first signed in with Google, and the Google identity would then link onto
 that pre-existing account.
 
+### Rate limits
+Checking a password costs a bcrypt hash, which is what makes guessing expensive
+for an attacker — and makes an unthrottled endpoint expensive for us. Sign-in,
+sign-up and password change are capped per client IP; exceeding the cap gives
+`429 too_many_requests` with a `Retry-After` header.
+
+The allowance refills continuously rather than resetting on a window boundary,
+so pausing for a third of the window returns a third of it. Refreshing a session
+is limited far more loosely (6×): it is ordinary traffic, and several tabs waking
+at once must not lock you out of your own app.
+
+State is in memory. This runs as one instance, so a shared store would mean an
+operational dependency to protect a single process; scale it horizontally and
+the limits become per-instance, which is the point to move them to Redis.
+
+Who a limit counts against depends on `TRUST_PROXY`. Behind Caddy the peer
+address is Caddy, so everyone would share one bucket — `X-Forwarded-For` carries
+the real caller. That header is only believed when `TRUST_PROXY` is on, and only
+its **last** entry: Caddy appends the peer it actually saw, while earlier entries
+are whatever the client claimed. Trusting the first entry (the usual shortcut)
+would let anyone mint a fresh bucket per request.
+
 ### Google sign-in
 Authorization Code flow; the app is a confidential client, and CSRF is covered by
 a `state` value echoed in a short-lived cookie. Accounts link by **verified** email:
@@ -289,6 +311,9 @@ it — `/api/session` reports `google: false` and the SPA drops the button.
 | `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URL` | Google OAuth client; the redirect URL must match the one registered on it exactly |
 | `GOOGLE_ALLOWED_EMAILS` | comma-separated sign-in allowlist; defaults to the single address in `config.go` |
 | `ALLOW_REGISTRATION` | open `POST /api/auth/register`; default `false` |
+| `AUTH_RATE_LIMIT` | sign-in attempts per IP per window; default `10` |
+| `AUTH_RATE_WINDOW` | the window; default `15m` |
+| `TRUST_PROXY` | believe `X-Forwarded-For`; defaults on when `CLIENT_DIR` is set |
 
 Deploy the single image as a `calories` service behind Traefik
 (`calories.<domain>`) with a `calories_user` Postgres role.
