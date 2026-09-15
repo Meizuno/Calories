@@ -101,6 +101,8 @@ export default {
     added: "Přidáno: {name}",
     fromMacros: "≈ {n} z makro",
     pickMeal: "Do kterého jídla",
+    forgetFood: "Zapomenout tuto potravinu",
+    scaledFrom: "Přepočítáno z „{name}“ ({kcal} kcal / {amount} {unit})",
   },
   profile: {
     onboardingHint: "Vítej! Než začneš, vyplň prosím svůj profil a denní cíl.",

@@ -4,3 +4,7 @@ client/node_modules/
 client/dist/
 server/bin/
 server/tmp/
+
+# dev.ps1 output when it is started detached rather than in a terminal
+dev-server.log
+dev-server.err.log

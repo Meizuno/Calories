@@ -1,4 +1,4 @@
-import type { Day, Profile, Stats } from "./types";
+import type { Day, Food, Profile, Stats } from "./types";
 import { apiFetch, JSON_HEADERS } from "./http";
 
 // Every call goes through apiFetch, which transparently refreshes an expired
@@ -45,6 +45,13 @@ export const api = {
   ) => apiFetch<Day>(`/api/entries/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, ...body }) }),
 
   deleteEntry: (date: string, id: number) => apiFetch<Day>(`/api/entries/${id}?date=${date}`, { method: "DELETE" }),
+
+  // Foods the app has remembered from what has been logged. Small enough to
+  // fetch whole and filter in the view, so typing a name needs no round-trip.
+  getFoods: () => apiFetch<Food[]>("/api/foods"),
+
+  // Both respond with the refreshed list.
+  forgetFood: (id: number) => apiFetch<Food[]>(`/api/foods/${id}`, { method: "DELETE" }),
 
   getProfile: () => apiFetch<Profile>("/api/profile"),
 

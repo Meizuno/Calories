@@ -136,3 +136,45 @@ func (q *Queries) ListFoods(ctx context.Context, profileID int64) ([]Food, error
 	}
 	return items, nil
 }
+
+const upsertFood = `-- name: UpsertFood :exec
+INSERT INTO foods (profile_id, name, basis_unit, basis_amount, kcal, carb, protein, fat)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (profile_id, lower(name), basis_unit) DO UPDATE
+SET name         = EXCLUDED.name,
+    basis_amount = EXCLUDED.basis_amount,
+    kcal         = EXCLUDED.kcal,
+    carb         = EXCLUDED.carb,
+    protein      = EXCLUDED.protein,
+    fat          = EXCLUDED.fat,
+    updated_at   = now()
+`
+
+type UpsertFoodParams struct {
+	ProfileID   int64
+	Name        string
+	BasisUnit   string
+	BasisAmount float64
+	Kcal        float64
+	Carb        float64
+	Protein     float64
+	Fat         float64
+}
+
+// Remember a food, or correct what we already remembered about it. Macros are
+// stored per basis_amount of basis_unit (100 g, 1 ks, ...) so any quantity can
+// be scaled from them later. Last write wins: fixing a value once fixes every
+// suggestion that follows.
+func (q *Queries) UpsertFood(ctx context.Context, arg UpsertFoodParams) error {
+	_, err := q.db.Exec(ctx, upsertFood,
+		arg.ProfileID,
+		arg.Name,
+		arg.BasisUnit,
+		arg.BasisAmount,
+		arg.Kcal,
+		arg.Carb,
+		arg.Protein,
+		arg.Fat,
+	)
+	return err
+}
