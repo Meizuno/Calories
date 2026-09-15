@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Meizuno/calories/internal/assistant"
 	"github.com/Meizuno/calories/internal/domain"
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store/db"
@@ -31,9 +32,12 @@ type Handlers struct {
 	allowedEmails map[string]bool
 	// allowRegistration opens POST /api/auth/register; off by default.
 	allowRegistration bool
+	// assistant is nil when no model is configured; /session reports that, so a
+	// client knows whether to offer the chat at all.
+	assistant *assistant.Service
 }
 
-func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, tokens *service.Tokens, auth *Auth, authsvc *service.Auth, google *Google, allowedEmails []string, allowRegistration bool) *Handlers {
+func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *service.Profiles, tokens *service.Tokens, auth *Auth, authsvc *service.Auth, google *Google, allowedEmails []string, allowRegistration bool, chat *assistant.Service) *Handlers {
 	allowed := make(map[string]bool, len(allowedEmails))
 	for _, e := range allowedEmails {
 		allowed[strings.ToLower(strings.TrimSpace(e))] = true
@@ -42,6 +46,7 @@ func NewHandlers(diary *service.Diary, catalog *service.Catalog, profiles *servi
 		diary: diary, catalog: catalog, profiles: profiles, tokens: tokens,
 		auth: auth, authsvc: authsvc, google: google,
 		allowedEmails: allowed, allowRegistration: allowRegistration,
+		assistant: chat,
 	}
 }
 
@@ -152,6 +157,7 @@ func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
 			"authenticated": false,
 			"google":        h.google != nil,
 			"registration":  h.allowRegistration,
+			"assistant":     h.chatAvailable(),
 		}})
 		return
 	}
@@ -180,6 +186,7 @@ func (h *Handlers) writeSession(w http.ResponseWriter, r *http.Request, userID s
 		"authenticated": true,
 		"google":        h.google != nil,
 		"registration":  h.allowRegistration,
+		"assistant":     h.chatAvailable(),
 		"user": map[string]any{
 			"email":       user.Email,
 			"name":        user.Name,
@@ -406,4 +413,10 @@ func apiError(w http.ResponseWriter, r *http.Request, err error) {
 
 func logRequestError(r *http.Request, what string, err error) {
 	slog.Error("api error", "what", what, "method", r.Method, "path", r.URL.Path, "err", err)
+}
+
+// chatAvailable says whether this deployment has an assistant configured, so a
+// client can hide the chat rather than offer a button that always fails.
+func (h *Handlers) chatAvailable() bool {
+	return h.assistant != nil && h.assistant.Available()
 }

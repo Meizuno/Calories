@@ -37,6 +37,17 @@ const navItems = computed(() => [
     label: t("nav.stats"),
     icon: "M3.75 20.25h16.5M7.5 20.25v-6.75m4.5 6.75V8.25m4.5 12V4.5",
   },
+  // Only where a model is actually configured: a destination that always fails
+  // is worse than one that is not offered.
+  ...(session.assistant
+    ? [
+        {
+          to: "/assistant",
+          label: t("assistant.title"),
+          icon: "M20.25 8.51c.88.28 1.5 1.13 1.5 2.1v4.29c0 1.13-.85 2.1-1.98 2.19-.34.03-.68.05-1.02.07v3.09l-3-3c-1.35 0-2.69-.05-4.02-.16a2.1 2.1 0 0 1-.83-.24m9.35-8.34a2.1 2.1 0 0 0-.48-.09 48.6 48.6 0 0 0-8.05 0c-1.13.09-1.97 1.06-1.97 2.19v4.29c0 .84.46 1.58 1.15 1.95m9.35-8.33V6.64c0-1.62-1.15-3.03-2.76-3.24A48.5 48.5 0 0 0 11.25 3c-2.12 0-4.2.14-6.24.4C3.4 3.61 2.25 5.02 2.25 6.64v6.23c0 1.62 1.15 3.03 2.76 3.23.58.08 1.16.14 1.74.2V21l4.16-4.15",
+        },
+      ]
+    : []),
 ]);
 
 </script>
@@ -156,9 +167,16 @@ const navItems = computed(() => [
       </div>
     </div>
 
-    <main class="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <!-- The assistant fills the window and pins its composer to the bottom, so
+         it manages its own vertical space; page padding here would push it
+         below the fold and put a scrollbar on an empty conversation. -->
+    <main
+      class="mx-auto max-w-6xl px-4 sm:px-6"
+      :class="route.path === '/assistant' ? '' : 'py-6 sm:py-8'"
+    >
       <RouterView />
     </main>
+
     </template>
   </UApp>
 </template>

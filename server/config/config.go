@@ -55,6 +55,20 @@ type Config struct {
 	// bucket per request. Defaults the same way SecureCookies does: on in the
 	// Docker image (which always runs behind Caddy), off in local dev.
 	TrustProxy bool
+
+	// Assistant selects the model behind the in-app chat: "" (off), "mock" (a
+	// canned reply, for building the UI without a key or a bill) or a provider
+	// name. Off by default -- a deployment should opt in to spending money.
+	Assistant string
+	// AssistantKey is the provider's API key. Without one, a real provider is
+	// refused at startup rather than failing on the first message.
+	AssistantKey string
+	// AssistantModel overrides the provider's default model.
+	AssistantModel string
+	// AssistantRateLimit caps messages per profile per AssistantRateWindow. This
+	// is the cost ceiling: every message is a paid call, possibly several.
+	AssistantRateLimit  int
+	AssistantRateWindow time.Duration
 }
 
 // The one account allowed to sign in with Google. Override with
@@ -93,6 +107,12 @@ func Load() Config {
 		AuthRateLimit:  intEnv("AUTH_RATE_LIMIT", 10),
 		AuthRateWindow: duration("AUTH_RATE_WINDOW", 15*time.Minute),
 		TrustProxy:     boolEnv("TRUST_PROXY", os.Getenv("CLIENT_DIR") != ""),
+
+		Assistant:           strings.ToLower(strings.TrimSpace(os.Getenv("ASSISTANT"))),
+		AssistantKey:        os.Getenv("ASSISTANT_API_KEY"),
+		AssistantModel:      os.Getenv("ASSISTANT_MODEL"),
+		AssistantRateLimit:  intEnv("ASSISTANT_RATE_LIMIT", 30),
+		AssistantRateWindow: duration("ASSISTANT_RATE_WINDOW", time.Hour),
 	}
 }
 

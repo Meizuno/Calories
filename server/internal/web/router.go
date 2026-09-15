@@ -28,7 +28,7 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string, limits Limits) http.Ha
 		r.Route("/v1", func(r chi.Router) {
 			mountAuth(r, h, gate, limits)
 			mountShared(r, h)
-			mountProtected(r, h, gate)
+			mountProtected(r, h, gate, limits)
 		})
 
 		// Unversioned aliases. These two are configured OUTSIDE this repository
@@ -93,7 +93,7 @@ func mountShared(r chi.Router, h *Handlers) {
 // stale) or a scoped PAT. Scope() then enforces what that principal may do —
 // default-deny, so an operation marked "" is full-session only and a PAT can
 // never reach it.
-func mountProtected(r chi.Router, h *Handlers, gate *Gate) {
+func mountProtected(r chi.Router, h *Handlers, gate *Gate, limits Limits) {
 	r.Group(func(r chi.Router) {
 		r.Use(gate.Middleware)
 
@@ -127,6 +127,11 @@ func mountProtected(r chi.Router, h *Handlers, gate *Gate) {
 		// parent in the path; ownership is enforced through the meal in SQL.
 		r.With(gate.Scope("")).Patch("/entries/{id}", h.UpdateEntry)
 		r.With(gate.Scope("")).Delete("/entries/{id}", h.DeleteEntry)
+
+		// The assistant. "read" at the gate, so a token that may not read the
+		// diary cannot ask a model to read it either; which tools it is then
+		// offered depends on the rest of its scopes.
+		r.With(gate.Scope("read"), limitByProfile(limits.Assistant)).Post("/chat", h.Chat)
 
 		// Remembered foods, built from what has been logged.
 		r.With(gate.Scope("read")).Get("/foods", h.ListFoods)

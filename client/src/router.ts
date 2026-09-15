@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import HomeView from "./views/HomeView.vue";
 import LogView from "./views/LogView.vue";
 import StatsView from "./views/StatsView.vue";
+import AssistantView from "./views/AssistantView.vue";
 import ProfileView from "./views/ProfileView.vue";
 import SharedProfileView from "./views/SharedProfileView.vue";
 import LoginView from "./views/LoginView.vue";
@@ -15,6 +16,7 @@ const router = createRouter({
     { path: "/login", component: LoginView, meta: { public: true } },
     { path: "/log", component: LogView },
     { path: "/stats", component: StatsView },
+    { path: "/assistant", component: AssistantView },
     { path: "/profiles/me", component: ProfileView },
     { path: "/profile/:uuid", component: SharedProfileView, meta: { public: true } },
   ],
