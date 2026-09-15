@@ -166,8 +166,17 @@ func buildAssistant(cfg config.Config, diary *service.Diary, catalog *service.Ca
 	case "mock":
 		slog.Warn("assistant running on the MOCK provider - replies are canned, no model is called")
 		return assistant.New(&assistant.MockProvider{Delay: 25 * time.Millisecond}, tools...)
+	case "openai":
+		if cfg.AssistantKey == "" {
+			fatal("assistant", errors.New("ASSISTANT=openai needs ASSISTANT_API_KEY"))
+		}
+		p := assistant.NewOpenAI(cfg.AssistantKey, cfg.AssistantModel)
+		// The model is logged because it is the one setting that silently
+		// changes both the bill and the quality of every answer.
+		slog.Info("assistant enabled", "provider", p.Name(), "model", p.Model)
+		return assistant.New(p, tools...)
 	default:
-		fatal("assistant", fmt.Errorf("unknown ASSISTANT %q (known: mock)", cfg.Assistant))
+		fatal("assistant", fmt.Errorf("unknown ASSISTANT %q (known: mock, openai)", cfg.Assistant))
 		return nil
 	}
 }
