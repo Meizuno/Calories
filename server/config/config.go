@@ -63,6 +63,11 @@ type Config struct {
 	// AssistantKey is the provider's API key. Without one, a real provider is
 	// refused at startup rather than failing on the first message.
 	AssistantKey string
+	// AssistantReasoning is sent as reasoning_effort. Empty omits it entirely,
+	// which is what a model predating the parameter needs; the provider's own
+	// default is "none", because tools and reasoning cannot be combined on the
+	// endpoint this talks to.
+	AssistantReasoning string
 	// AssistantModel overrides the provider's default model.
 	AssistantModel string
 	// AssistantRateLimit caps messages per profile per AssistantRateWindow. This
@@ -111,6 +116,7 @@ func Load() Config {
 		Assistant:           strings.ToLower(strings.TrimSpace(os.Getenv("ASSISTANT"))),
 		AssistantKey:        os.Getenv("ASSISTANT_API_KEY"),
 		AssistantModel:      os.Getenv("ASSISTANT_MODEL"),
+		AssistantReasoning:  envSet("ASSISTANT_REASONING", "none"),
 		AssistantRateLimit:  intEnv("ASSISTANT_RATE_LIMIT", 30),
 		AssistantRateWindow: duration("ASSISTANT_RATE_WINDOW", time.Hour),
 	}
@@ -156,6 +162,16 @@ func jwtSecret() string {
 
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// envSet is env() for a setting whose empty value is meaningful. Setting
+// ASSISTANT_REASONING= must switch the parameter OFF, not fall back to the
+// default, so unset and empty have to be told apart.
+func envSet(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return fallback

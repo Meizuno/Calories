@@ -28,6 +28,16 @@ type OpenAI struct {
 	// BaseURL allows a compatible gateway - or a test server - to stand in.
 	BaseURL string
 	HTTP    *http.Client
+	// ReasoningEffort is sent as reasoning_effort when set.
+	//
+	// It has to be "none" on this endpoint: the 5.6 family reasons by default,
+	// and chat completions refuses function tools together with reasoning -
+	// "use /v1/responses or set reasoning_effort to none". Since the entire
+	// design is a tool loop, tools win and reasoning goes.
+	//
+	// Clear it (ASSISTANT_REASONING=) for a model that predates the parameter,
+	// which would reject it as unknown rather than ignore it.
+	ReasoningEffort string
 }
 
 // DefaultOpenAIModel is the cheapest current model that does BOTH vision and
@@ -41,9 +51,10 @@ func NewOpenAI(key, model string) *OpenAI {
 		model = DefaultOpenAIModel
 	}
 	return &OpenAI{
-		Key:     key,
-		Model:   model,
-		BaseURL: "https://api.openai.com/v1",
+		Key:             key,
+		Model:           model,
+		BaseURL:         "https://api.openai.com/v1",
+		ReasoningEffort: "none",
 		// Generous, and a backstop only: the request context is what actually
 		// ends a turn when the person closes the tab. Without any timeout a
 		// half-open connection would hold the handler open indefinitely.
@@ -56,10 +67,11 @@ func (o *OpenAI) Name() string { return "openai" }
 // ── the wire ─────────────────────────────────────────────────────────────────
 
 type oaiRequest struct {
-	Model    string       `json:"model"`
-	Stream   bool         `json:"stream"`
-	Messages []oaiMessage `json:"messages"`
-	Tools    []oaiTool    `json:"tools,omitempty"`
+	Model           string       `json:"model"`
+	Stream          bool         `json:"stream"`
+	Messages        []oaiMessage `json:"messages"`
+	Tools           []oaiTool    `json:"tools,omitempty"`
+	ReasoningEffort string       `json:"reasoning_effort,omitempty"`
 }
 
 // Content is `any` because it is either a plain string or a list of parts, and
@@ -150,10 +162,11 @@ func encodeTools(tools []Tool) []oaiTool {
 
 func (o *OpenAI) Stream(ctx context.Context, msgs []Message, tools []Tool) (Stream, error) {
 	body, err := json.Marshal(oaiRequest{
-		Model:    o.Model,
-		Stream:   true,
-		Messages: encode(msgs),
-		Tools:    encodeTools(tools),
+		Model:           o.Model,
+		Stream:          true,
+		Messages:        encode(msgs),
+		Tools:           encodeTools(tools),
+		ReasoningEffort: o.ReasoningEffort,
 	})
 	if err != nil {
 		return nil, err

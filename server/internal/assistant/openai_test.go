@@ -259,3 +259,43 @@ func TestOpenAIDefaultsToAModelThatCanSeeAndCallTools(t *testing.T) {
 		t.Error("an explicit model was overridden")
 	}
 }
+
+// The 5.6 family reasons by default, and chat completions rejects the whole
+// request when reasoning meets function tools:
+//
+//	Function tools with reasoning_effort are not supported for gpt-5.6-luna
+//	in /v1/chat/completions.
+//
+// Since this assistant IS a tool loop, reasoning is what gives way. Without
+// this parameter every message fails with a 400.
+func TestOpenAITurnsReasoningOffSoToolsAreAccepted(t *testing.T) {
+	p, got := serving(t, "data: [DONE]\n\n")
+
+	stream, err := p.Stream(context.Background(), []Message{{Role: RoleUser, Text: "x"}},
+		[]Tool{{Name: "get_day", Schema: json.RawMessage(`{"type":"object"}`)}})
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	stream.Close()
+
+	if got.ReasoningEffort != "none" {
+		t.Errorf("reasoning_effort = %q, want none", got.ReasoningEffort)
+	}
+}
+
+// A model predating the parameter rejects it as unknown rather than ignoring
+// it, so clearing the setting has to drop the field entirely.
+func TestOpenAIOmitsReasoningWhenItIsCleared(t *testing.T) {
+	p, got := serving(t, "data: [DONE]\n\n")
+	p.ReasoningEffort = ""
+
+	stream, err := p.Stream(context.Background(), []Message{{Role: RoleUser, Text: "x"}}, nil)
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	stream.Close()
+
+	if got.ReasoningEffort != "" {
+		t.Errorf("reasoning_effort = %q, want it absent", got.ReasoningEffort)
+	}
+}

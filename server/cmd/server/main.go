@@ -171,6 +171,7 @@ func buildAssistant(cfg config.Config, diary *service.Diary, catalog *service.Ca
 			fatal("assistant", errors.New("ASSISTANT=openai needs ASSISTANT_API_KEY"))
 		}
 		p := assistant.NewOpenAI(cfg.AssistantKey, cfg.AssistantModel)
+		p.ReasoningEffort = cfg.AssistantReasoning
 		// The model is logged because it is the one setting that silently
 		// changes both the bill and the quality of every answer.
 		slog.Info("assistant enabled", "provider", p.Name(), "model", p.Model)
