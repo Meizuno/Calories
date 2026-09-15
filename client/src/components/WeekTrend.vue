@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { api } from "../lib/api";
 import { t, weekdayShort } from "../lib/i18n";
 import { useAnimatedNumber, useReveal } from "../composables/useAnimatedNumber";
@@ -8,8 +7,19 @@ import type { Stats } from "../lib/types";
 
 // Seven days ending on the day being viewed, so browsing back through the diary
 // carries its own context rather than always showing the current week.
-const props = defineProps<{ date: string }>();
-const router = useRouter();
+//
+// Where the numbers come from is injected, the same way StatsPanel takes its
+// fetcher: the owner reads their own diary, a visitor to a shared profile reads
+// that profile's public one. Clicking a day emits rather than navigating, since
+// only the parent knows whether a day means a route or just a change of state.
+const props = withDefaults(
+  defineProps<{
+    date: string;
+    fetchStats?: (from: string, to: string) => Promise<Stats>;
+  }>(),
+  { fetchStats: undefined },
+);
+const emit = defineEmits<{ (e: "pick-day", iso: string): void }>();
 
 const stats = ref<Stats | null>(null);
 const failed = ref(false);
@@ -23,7 +33,8 @@ function shift(iso: string, days: number) {
 async function load(date: string) {
   failed.value = false;
   try {
-    stats.value = await api.getStats(shift(date, -6), date);
+    const fetcher = props.fetchStats ?? api.getStats;
+    stats.value = await fetcher(shift(date, -6), date);
   } catch {
     stats.value = null;
     failed.value = true;
@@ -81,9 +92,9 @@ const shownAverage = computed(() => animatedAverage.value * reveal.value);
 const hasData = computed(() => days.value.some((d) => d.logged));
 
 // Hovering a day lifts its column, matching the statistics chart; clicking one
-// opens it in the diary, the same gesture the chart's day level uses.
+// opens it, the same gesture the chart's day level uses.
 const hovered = ref<string | null>(null);
-const openDay = (iso: string) => router.push({ path: "/", query: { date: iso } });
+const openDay = (iso: string) => emit("pick-day", iso);
 </script>
 
 <template>
