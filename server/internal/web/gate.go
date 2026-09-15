@@ -31,7 +31,8 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 			if strings.HasPrefix(tok, service.PATPrefix) {
 				pid, scopes, ok := g.tokens.Resolve(r.Context(), tok)
 				if !ok {
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					drain(r)
+					writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 					return
 				}
 				ctx := context.WithValue(r.Context(), profileIDKey, pid)
@@ -45,12 +46,14 @@ func (g *Gate) Middleware(next http.Handler) http.Handler {
 		// from the refresh cookie, so the caller never sees the expiry.
 		uid := g.auth.ResolveWithRefresh(w, r)
 		if uid == "" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			drain(r)
+			writeError(w, http.StatusUnauthorized, "unauthorized", "sign in to continue")
 			return
 		}
 		prof, err := g.profiles.Ensure(r.Context(), uid)
 		if err != nil {
-			http.Error(w, "profile unavailable", http.StatusInternalServerError)
+			logRequestError(r, "ensure profile", err)
+			writeError(w, http.StatusInternalServerError, "internal", "something went wrong")
 			return
 		}
 		ctx := context.WithValue(r.Context(), userIDKey, uid)
@@ -66,7 +69,8 @@ func (g *Gate) Scope(scope string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !allowed(r.Context(), scope) {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				drain(r)
+				writeError(w, http.StatusForbidden, "forbidden", "this token may not do that")
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -80,11 +84,13 @@ func (g *Gate) PAT(scope string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if IsFull(r.Context()) {
-				http.Error(w, "this endpoint requires a personal access token", http.StatusForbidden)
+				drain(r)
+				writeError(w, http.StatusForbidden, "pat_required", "this endpoint requires a personal access token")
 				return
 			}
 			if !allowed(r.Context(), scope) {
-				http.Error(w, "forbidden", http.StatusForbidden)
+				drain(r)
+				writeError(w, http.StatusForbidden, "forbidden", "this token may not do that")
 				return
 			}
 			next.ServeHTTP(w, r)

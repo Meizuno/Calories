@@ -55,7 +55,7 @@ func (q *Queries) CreateFood(ctx context.Context, arg CreateFoodParams) (Food, e
 	return i, err
 }
 
-const deleteFood = `-- name: DeleteFood :exec
+const deleteFood = `-- name: DeleteFood :execrows
 DELETE FROM foods WHERE id = $1 AND profile_id = $2
 `
 
@@ -64,9 +64,12 @@ type DeleteFoodParams struct {
 	ProfileID int64
 }
 
-func (q *Queries) DeleteFood(ctx context.Context, arg DeleteFoodParams) error {
-	_, err := q.db.Exec(ctx, deleteFood, arg.ID, arg.ProfileID)
-	return err
+func (q *Queries) DeleteFood(ctx context.Context, arg DeleteFoodParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteFood, arg.ID, arg.ProfileID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getFood = `-- name: GetFood :one

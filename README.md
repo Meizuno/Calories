@@ -131,6 +131,71 @@ the app.
 - **client:** Vue 3 + Vite + **Nuxt UI** (Vue mode: `@nuxt/ui/vite` plugin +
   `@nuxt/ui/vue-plugin`), package manager **pnpm**.
 
+## API
+
+Everything lives under `/api/v1`. Two conventions hold across it, so a client
+written against one endpoint is not surprised by the next:
+
+**Every success is a JSON object naming what it returns.** Not a bare value:
+an object can gain a field later without breaking a caller that only reads the
+one it knows.
+
+```
+GET  /api/v1/day?date=2026-06-30   → {"day":   {...}}
+GET  /api/v1/days                  → {"days":  ["2026-06-29", ...]}
+GET  /api/v1/stats?from=&to=       → {"stats": {...}}
+GET  /api/v1/foods                 → {"foods": [...]}
+GET  /api/v1/profile               → {"profile": {...}}
+GET  /api/v1/session               → {"session": {...}}
+```
+
+Every mutation answers with the day it changed, as `{"day": …}` — so the client
+never refetches after a write. A copy answers with the day it copied *into*.
+
+**Every failure is `{"code","message"}` with a real status.** The code is stable
+and the SPA translates it; the message is a fallback, never a driver error.
+Nothing is swallowed: a write that did not happen returns 4xx/5xx rather than a
+cheerful 200 with an unchanged day.
+
+```
+400 invalid_date   invalid_body   name_required   invalid_entry
+401 unauthorized   403 forbidden  pat_required
+404 not_found      500 internal
+```
+
+`not_found` covers both "no such row" and "not yours" on purpose — telling those
+apart is how ids become enumerable.
+
+Dates are `YYYY-MM-DD` UTC calendar days. An omitted date means today; a
+malformed one is a 400, never a silent fall back to today.
+
+```
+GET    /api/v1/day?date=            the day, its meals and entries
+GET    /api/v1/days                 dates that have data (for a calendar)
+GET    /api/v1/stats?from=&to=      per-day totals + the goal (window capped at a year)
+POST   /api/v1/meals                {date, name, note?, entries?[]}
+PATCH  /api/v1/meals/{id}           {date, name, note}
+DELETE /api/v1/meals/{id}?date=
+POST   /api/v1/meals/{id}/copy      {date}  → the day copied INTO
+POST   /api/v1/meals/{id}/entries   {date, name, quantity, unit, kcal, carb, protein, fat}
+PATCH  /api/v1/entries/{id}         same body
+DELETE /api/v1/entries/{id}?date=
+GET    /api/v1/foods                remembered foods, macros per basis
+POST   /api/v1/foods                {name, basisUnit?, basisAmount?, macros}
+DELETE /api/v1/foods/{id}
+GET    /api/v1/profile              PUT to save
+GET    /api/v1/shared/{uuid}        + /day, /days, /stats — public, read-only
+```
+
+A meal is created with or without its entries, so an assistant logs a whole meal
+in one call and the diary posts a bare one: the same endpoint either way. Public
+shared-profile reads run through the *same* handlers as the owner's; only how
+the profile is resolved differs.
+
+Two unversioned paths remain, because they are configured outside this
+repository and a deploy cannot change them: `/api/auth/*` (the redirect URL
+registered on the Google OAuth client) and `POST /api/log` (see below).
+
 ## Accounts & auth
 Auth is **in-app** — there is no external auth service. Three tables:
 
@@ -175,6 +240,10 @@ victim together. `/api/auth/logout` revokes the family and clears both cookies.
 
 Because the access token is stateless, a revoked session keeps working until that
 token expires — which is why `ACCESS_TTL` is short. Endpoints:
+
+These are mounted at both `/api/v1/auth/*` and `/api/auth/*`. The unversioned
+copy exists because Google holds the callback URL, and changing it means editing
+the OAuth client rather than deploying.
 
 ```
 POST /api/auth/register   {email, password, name}   → session, sets cookies
@@ -244,13 +313,13 @@ There is no UI — manage tokens over the API with a logged-in session cookie
 
 ```bash
 # create — the raw token is returned ONCE
-curl -X POST https://calories.meizuno.com/api/pats -b "access_token=$C" \
+curl -X POST https://calories.meizuno.com/api/v1/pats -b "access_token=$C" \
   -H 'Content-Type: application/json' -d '{"name":"import","scopes":["read","add"]}'
-curl https://calories.meizuno.com/api/pats -b "access_token=$C"          # list
-curl -X DELETE https://calories.meizuno.com/api/pats/<id> -b "access_token=$C"  # revoke
+curl https://calories.meizuno.com/api/v1/pats -b "access_token=$C"       # list
+curl -X DELETE https://calories.meizuno.com/api/v1/pats/<id> -b "access_token=$C"  # revoke
 
 # use the PAT (no cookie):
-curl https://calories.meizuno.com/api/day -H "Authorization: Bearer cal_pat_…"
+curl https://calories.meizuno.com/api/v1/day -H "Authorization: Bearer cal_pat_…"
 ```
 
 ### Log a meal — `POST /api/log` (PAT only, scope `add`)
@@ -259,6 +328,11 @@ note and its entries — in one call, and returns the updated day. **PAT only** 
 browser session is rejected (use the diary UI for that). Macros are per the whole
 entry as stated (not per 100 g); the server clamps negatives to 0 and skips
 entries without a name or with a non-positive quantity.
+
+This is now an alias for `POST /api/v1/meals`, kept unversioned and at this path
+so an assistant already configured against it keeps working. It accepts the meal
+name as either `meal` (as below) or `name`. New callers should post to
+`/api/v1/meals`, which is the same endpoint without the PAT-only restriction.
 
 ```bash
 curl -X POST https://calories.meizuno.com/api/log \

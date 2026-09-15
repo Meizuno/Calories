@@ -3,64 +3,81 @@ import { apiFetch, JSON_HEADERS } from "./http";
 
 // Every call goes through apiFetch, which transparently refreshes an expired
 // access token once and replays the request before giving up on the session.
+//
+// The API answers with an object naming what it returns — {"day": …},
+// {"foods": …} — so a response can gain a field without breaking a caller that
+// only reads the one it knows. This module unwraps that envelope, so the views
+// keep seeing plain Day / Stats / Food values.
+
+const V1 = "/api/v1";
+
+const post = (body: unknown): RequestInit => ({ method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
+const patch = (body: unknown): RequestInit => ({ method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify(body) });
+const del: RequestInit = { method: "DELETE" };
+
+const unwrap = <T>(key: string, p: Promise<Record<string, T>>): Promise<T> => p.then((r) => r[key]);
+/** Most mutations answer with the day they changed. */
+const day = (path: string, init?: RequestInit) => unwrap<Day>("day", apiFetch(path, init));
 
 export const api = {
-  getDay: (date: string) => apiFetch<Day>(`/api/day?date=${date}`),
+  getDay: (date: string) => day(`${V1}/day?date=${date}`),
 
   // dates (YYYY-MM-DD) that have logged data — used to enable calendar days
-  getDays: () => apiFetch<string[]>("/api/days"),
+  getDays: () => unwrap<string[]>("days", apiFetch(`${V1}/days`)),
 
   // per-day macro totals for an inclusive [from, to] range (YYYY-MM-DD)
-  getStats: (from: string, to: string) => apiFetch<Stats>(`/api/stats?from=${from}&to=${to}`),
+  getStats: (from: string, to: string) => unwrap<Stats>("stats", apiFetch(`${V1}/stats?from=${from}&to=${to}`)),
 
-  addMeal: (date: string, name: string) =>
-    apiFetch<Day>("/api/meals", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date, name }) }),
+  // A meal may be created complete with its entries; the diary sends none and
+  // fills them in afterwards.
+  addMeal: (date: string, name: string) => day(`${V1}/meals`, post({ date, name })),
 
   updateMeal: (date: string, id: number, name: string, note: string) =>
-    apiFetch<Day>(`/api/meals/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, name, note }) }),
+    day(`${V1}/meals/${id}`, patch({ date, name, note })),
 
-  deleteMeal: (date: string, id: number) => apiFetch<Day>(`/api/meals/${id}?date=${date}`, { method: "DELETE" }),
+  deleteMeal: (date: string, id: number) => day(`${V1}/meals/${id}?date=${date}`, del),
 
   // Duplicate a meal (entries and all) onto `toDate`. Resolves with THAT day,
   // not the one the meal came from.
-  copyMeal: (id: number, toDate: string) =>
-    apiFetch<Day>(`/api/meals/${id}/copy`, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify({ date: toDate }) }),
+  copyMeal: (id: number, toDate: string) => day(`${V1}/meals/${id}/copy`, post({ date: toDate })),
 
-  addEntry: (body: {
-    date: string;
-    mealId: number;
-    name: string;
-    quantity: number;
-    unit: string;
-    kcal: number;
-    carb: number;
-    protein: number;
-    fat: number;
-  }) => apiFetch<Day>("/api/entries", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }),
+  // The meal is an address rather than a body field: an item is created against
+  // the meal it belongs to.
+  addEntry: (
+    date: string,
+    mealId: number,
+    body: { name: string; quantity: number; unit: string; kcal: number; carb: number; protein: number; fat: number },
+  ) => day(`${V1}/meals/${mealId}/entries`, post({ date, ...body })),
 
   updateEntry: (
     date: string,
     id: number,
     body: { name: string; quantity: number; unit: string; kcal: number; carb: number; protein: number; fat: number },
-  ) => apiFetch<Day>(`/api/entries/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify({ date, ...body }) }),
+  ) => day(`${V1}/entries/${id}`, patch({ date, ...body })),
 
-  deleteEntry: (date: string, id: number) => apiFetch<Day>(`/api/entries/${id}?date=${date}`, { method: "DELETE" }),
+  deleteEntry: (date: string, id: number) => day(`${V1}/entries/${id}?date=${date}`, del),
 
   // Foods the app has remembered from what has been logged. Small enough to
   // fetch whole and filter in the view, so typing a name needs no round-trip.
-  getFoods: () => apiFetch<Food[]>("/api/foods"),
+  getFoods: () => unwrap<Food[]>("foods", apiFetch(`${V1}/foods`)),
 
-  // Both respond with the refreshed list.
-  forgetFood: (id: number) => apiFetch<Food[]>(`/api/foods/${id}`, { method: "DELETE" }),
+  // Responds with the refreshed list.
+  forgetFood: (id: number) => unwrap<Food[]>("foods", apiFetch(`${V1}/foods/${id}`, del)),
 
-  getProfile: () => apiFetch<Profile>("/api/profile"),
+  getProfile: () => unwrap<Profile>("profile", apiFetch(`${V1}/profile`)),
 
   saveProfile: (body: { name: string; kcal: number; carb: number; protein: number; fat: number; shared: boolean }) =>
-    apiFetch<Profile>("/api/profile", { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body) }),
+    unwrap<Profile>(
+      "profile",
+      apiFetch(`${V1}/profile`, { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(body) }),
+    ),
 
-  // public, read-only (shared profiles)
-  getShared: (uuid: string) => apiFetch<Profile>(`/api/shared/${uuid}`),
-  getSharedDay: (uuid: string, date: string) => apiFetch<Day>(`/api/shared/${uuid}/day?date=${date}`),
-  getSharedStats: (uuid: string, from: string, to: string) => apiFetch<Stats>(`/api/shared/${uuid}/stats?from=${from}&to=${to}`),
-  getSharedDays: (uuid: string) => apiFetch<string[]>(`/api/shared/${uuid}/days`),
+  // Public, read-only view of a profile that opted into sharing. These are the
+  // same endpoints the owner reads, addressed by the profile's public id
+  // instead of by a session.
+  getShared: (uuid: string) => unwrap<Profile>("profile", apiFetch(`${V1}/shared/${uuid}`)),
+  getSharedDay: (uuid: string, date: string) => day(`${V1}/shared/${uuid}/day?date=${date}`),
+  getSharedStats: (uuid: string, from: string, to: string) =>
+    unwrap<Stats>("stats", apiFetch(`${V1}/shared/${uuid}/stats?from=${from}&to=${to}`)),
+  getSharedDays: (uuid: string) => unwrap<string[]>("days", apiFetch(`${V1}/shared/${uuid}/days`)),
 };

@@ -17,8 +17,8 @@ SELECT * FROM meals WHERE id = $1 AND profile_id = $2;
 -- name: CreateMeal :one
 INSERT INTO meals (profile_id, date, name, position, note) VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
--- name: UpdateMeal :exec
+-- name: UpdateMeal :execrows
 UPDATE meals SET name = $3, note = $4 WHERE id = $1 AND profile_id = $2;
 
--- name: DeleteMeal :exec
+-- name: DeleteMeal :execrows
 DELETE FROM meals WHERE id = $1 AND profile_id = $2;

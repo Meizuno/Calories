@@ -6,7 +6,7 @@
 // The server renews the session itself when the access token has expired, so a
 // 401 normally means the session is genuinely over. This retry stays as a
 // fallback for the cases the server cannot cover — a request whose response had
-// already started, say — and calls /api/auth/refresh once before giving up.
+// already started, say — and calls /api/v1/auth/refresh once before giving up.
 
 type AuthLostHandler = () => void;
 
@@ -25,7 +25,7 @@ let refreshing: Promise<boolean> | null = null;
 
 function refresh(): Promise<boolean> {
   if (!refreshing) {
-    refreshing = fetch("/api/auth/refresh", { method: "POST" })
+    refreshing = fetch("/api/v1/auth/refresh", { method: "POST" })
       .then((r) => r.ok)
       .catch(() => false)
       .finally(() => {

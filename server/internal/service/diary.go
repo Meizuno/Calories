@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/Meizuno/calories/internal/domain"
 	"github.com/Meizuno/calories/internal/store/db"
@@ -21,6 +24,26 @@ type DayView struct {
 	Target    domain.Macros
 	Eaten     domain.Macros
 	Remaining domain.Macros
+}
+
+// ErrNotFound is returned when an id names nothing this profile owns. The two
+// cases are deliberately one error: telling a caller "that exists, but not for
+// you" is how you let someone enumerate other people's rows.
+var ErrNotFound = errors.New("not found")
+
+// notFound normalises the shapes the store reports a miss in: a :one query
+// returns pgx.ErrNoRows, while a scoped UPDATE/DELETE simply matches no row.
+func notFound(rows int64, err error) error {
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 type Diary struct {
@@ -65,15 +88,6 @@ func (s *Diary) GetDayView(ctx context.Context, profileID int64, date time.Time)
 	}, nil
 }
 
-func (s *Diary) AddMeal(ctx context.Context, profileID int64, date time.Time, name, note string) error {
-	pos, err := s.q.MaxMealPosition(ctx, db.MaxMealPositionParams{ProfileID: profileID, Date: date})
-	if err != nil {
-		return err
-	}
-	_, err = s.q.CreateMeal(ctx, db.CreateMealParams{ProfileID: profileID, Date: date, Name: name, Position: pos + 1, Note: strPtr(note)})
-	return err
-}
-
 // EntryInput is one ad-hoc line for LogMeal; macros are taken as given (the
 // caller clamps them).
 type EntryInput struct {
@@ -81,10 +95,11 @@ type EntryInput struct {
 	Quantity, Kcal, Carb, Protein, Fat float64
 }
 
-// LogMeal creates a meal (with optional note) and all of its ad-hoc entries in a
-// single call — the shape a chat assistant logs through the PAT API. Blank-named
-// or non-positive-quantity entries are skipped. Returns the new meal id.
-func (s *Diary) LogMeal(ctx context.Context, profileID int64, date time.Time, name, note string, entries []EntryInput) (int64, error) {
+// CreateMeal creates a meal (with an optional note) and any entries given with
+// it, in one call. It is the only way a meal is made: the diary posts it with no
+// entries and fills them in afterwards, an assistant posts it complete. Blank
+// or non-positive entries are skipped. Returns the new meal id.
+func (s *Diary) CreateMeal(ctx context.Context, profileID int64, date time.Time, name, note string, entries []EntryInput) (int64, error) {
 	pos, err := s.q.MaxMealPosition(ctx, db.MaxMealPositionParams{ProfileID: profileID, Date: date})
 	if err != nil {
 		return 0, err
@@ -133,7 +148,7 @@ func (s *Diary) LogMeal(ctx context.Context, profileID int64, date time.Time, na
 func (s *Diary) CopyMeal(ctx context.Context, profileID, mealID int64, to time.Time) (int64, error) {
 	src, err := s.q.GetMealForProfile(ctx, db.GetMealForProfileParams{ID: mealID, ProfileID: profileID})
 	if err != nil {
-		return 0, err
+		return 0, notFound(1, err)
 	}
 	entries, err := s.q.ListEntriesForMeal(ctx, mealID)
 	if err != nil {
@@ -212,11 +227,11 @@ func (s *Diary) GetStats(ctx context.Context, profileID int64, from, to time.Tim
 }
 
 func (s *Diary) DeleteMeal(ctx context.Context, profileID, mealID int64) error {
-	return s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID})
+	return notFound(s.q.DeleteMeal(ctx, db.DeleteMealParams{ID: mealID, ProfileID: profileID}))
 }
 
 func (s *Diary) UpdateMeal(ctx context.Context, profileID, mealID int64, name, note string) error {
-	return s.q.UpdateMeal(ctx, db.UpdateMealParams{ID: mealID, ProfileID: profileID, Name: name, Note: strPtr(note)})
+	return notFound(s.q.UpdateMeal(ctx, db.UpdateMealParams{ID: mealID, ProfileID: profileID, Name: name, Note: strPtr(note)}))
 }
 
 // strPtr maps an empty string to NULL (no note) and otherwise to a pointer.
@@ -231,11 +246,11 @@ func strPtr(s string) *string {
 // entry. The meal is verified to belong to the profile (no IDOR).
 func (s *Diary) AddFoodEntry(ctx context.Context, profileID, mealID, foodID int64, quantity float64) error {
 	if _, err := s.q.GetMealForProfile(ctx, db.GetMealForProfileParams{ID: mealID, ProfileID: profileID}); err != nil {
-		return err
+		return notFound(1, err)
 	}
 	food, err := s.q.GetFood(ctx, db.GetFoodParams{ID: foodID, ProfileID: profileID})
 	if err != nil {
-		return err
+		return notFound(1, err)
 	}
 	m := domain.Scale(domain.Macros{Kcal: food.Kcal, Carb: food.Carb, Protein: food.Protein, Fat: food.Fat}, food.BasisAmount, quantity)
 	pos, err := s.q.MaxEntryPosition(ctx, mealID)
@@ -262,7 +277,7 @@ func (s *Diary) AddFoodEntry(ctx context.Context, profileID, mealID, foodID int6
 // with no catalog food behind it. The meal is verified to belong to the profile.
 func (s *Diary) AddAdhocEntry(ctx context.Context, profileID, mealID int64, name, unit string, quantity, kcal, carb, protein, fat float64) error {
 	if _, err := s.q.GetMealForProfile(ctx, db.GetMealForProfileParams{ID: mealID, ProfileID: profileID}); err != nil {
-		return err
+		return notFound(1, err)
 	}
 	if unit == "" {
 		unit = "g"
@@ -287,7 +302,7 @@ func (s *Diary) AddAdhocEntry(ctx context.Context, profileID, mealID int64, name
 }
 
 func (s *Diary) DeleteEntry(ctx context.Context, profileID, entryID int64) error {
-	return s.q.DeleteEntry(ctx, db.DeleteEntryParams{ID: entryID, ProfileID: profileID})
+	return notFound(s.q.DeleteEntry(ctx, db.DeleteEntryParams{ID: entryID, ProfileID: profileID}))
 }
 
 // UpdateEntry edits a line in place (name + quantity + macros). Ownership is
@@ -296,7 +311,7 @@ func (s *Diary) UpdateEntry(ctx context.Context, profileID, entryID int64, name,
 	if unit == "" {
 		unit = "g"
 	}
-	return s.q.UpdateEntry(ctx, db.UpdateEntryParams{
+	return notFound(s.q.UpdateEntry(ctx, db.UpdateEntryParams{
 		ID:        entryID,
 		ProfileID: profileID,
 		Name:      name,
@@ -306,7 +321,7 @@ func (s *Diary) UpdateEntry(ctx context.Context, profileID, entryID int64, name,
 		Carb:      carb,
 		Protein:   protein,
 		Fat:       fat,
-	})
+	}))
 }
 
 // goal reads the daily macro target from the profile, falling back to defaults

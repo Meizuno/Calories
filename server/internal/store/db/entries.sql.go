@@ -118,7 +118,7 @@ func (q *Queries) DailyTotals(ctx context.Context, arg DailyTotalsParams) ([]Dai
 	return items, nil
 }
 
-const deleteEntry = `-- name: DeleteEntry :exec
+const deleteEntry = `-- name: DeleteEntry :execrows
 DELETE FROM entries AS e USING meals AS m
 WHERE e.id = $1 AND e.meal_id = m.id AND m.profile_id = $2
 `
@@ -128,9 +128,12 @@ type DeleteEntryParams struct {
 	ProfileID int64
 }
 
-func (q *Queries) DeleteEntry(ctx context.Context, arg DeleteEntryParams) error {
-	_, err := q.db.Exec(ctx, deleteEntry, arg.ID, arg.ProfileID)
-	return err
+func (q *Queries) DeleteEntry(ctx context.Context, arg DeleteEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEntry, arg.ID, arg.ProfileID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listEntriesForDay = `-- name: ListEntriesForDay :many
@@ -224,7 +227,7 @@ func (q *Queries) MaxEntryPosition(ctx context.Context, mealID int64) (int32, er
 	return pos, err
 }
 
-const updateEntry = `-- name: UpdateEntry :exec
+const updateEntry = `-- name: UpdateEntry :execrows
 UPDATE entries AS e
 SET name = $3, quantity = $4, unit = $5, kcal = $6, carb = $7, protein = $8, fat = $9
 FROM meals AS m
@@ -243,8 +246,8 @@ type UpdateEntryParams struct {
 	Fat       float64
 }
 
-func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error {
-	_, err := q.db.Exec(ctx, updateEntry,
+func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateEntry,
 		arg.ID,
 		arg.ProfileID,
 		arg.Name,
@@ -255,5 +258,8 @@ func (q *Queries) UpdateEntry(ctx context.Context, arg UpdateEntryParams) error 
 		arg.Protein,
 		arg.Fat,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

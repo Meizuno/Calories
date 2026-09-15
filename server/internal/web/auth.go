@@ -16,6 +16,9 @@ const (
 	profileIDKey
 	scopesKey
 	fullKey
+	// set by SharedProfileCtx so a public read can answer with the profile it
+	// already resolved instead of looking it up twice
+	sharedProfileKey
 )
 
 // Cookie names. Both are HttpOnly, so script on the page can never read them —
