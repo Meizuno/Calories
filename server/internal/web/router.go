@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
+func NewRouter(h *Handlers, gate *Gate, clientDir string, limits Limits) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger, middleware.Recoverer)
 
@@ -26,7 +26,7 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 		// without breaking a caller, and a failed write never looks like a
 		// successful one.
 		r.Route("/v1", func(r chi.Router) {
-			mountAuth(r, h, gate)
+			mountAuth(r, h, gate, limits)
 			mountShared(r, h)
 			mountProtected(r, h, gate)
 		})
@@ -37,7 +37,7 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 		//   /api/log     pasted into whatever assistant posts meals
 		// Everything else moved to /v1; the SPA ships with the server, so it was
 		// updated in step.
-		mountAuth(r, h, gate)
+		mountAuth(r, h, gate, limits)
 		r.With(gate.Middleware, gate.PAT("add")).Post("/log", h.CreateMeal)
 	})
 
@@ -49,23 +49,29 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 // mountAuth registers the session endpoints. Called twice: once under /v1 and
 // once unversioned, because Google holds the callback URL and a deploy cannot
 // change what is registered there.
-func mountAuth(r chi.Router, h *Handlers, gate *Gate) {
+func mountAuth(r chi.Router, h *Handlers, gate *Gate, limits Limits) {
 	// Bootstraps a client: authenticated? which account? which profile? which
 	// sign-in methods does this deployment offer?
 	r.Get("/session", h.Session)
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/register", h.Register)
-		r.Post("/login", h.LoginPassword)
+		// Password checks are rate limited per caller: each costs a bcrypt hash,
+		// which is what makes guessing expensive for an attacker and makes an
+		// unthrottled endpoint expensive for us.
+		limited(r, limits.Auth, limits.TrustProxy).Post("/register", h.Register)
+		limited(r, limits.Auth, limits.TrustProxy).Post("/login", h.LoginPassword)
 		// Rotates the session. The refresh cookie is scoped to /api, which covers
 		// this path under both the versioned and unversioned mount.
-		r.Post("/refresh", h.Refresh)
+		limited(r, limits.Refresh, limits.TrustProxy).Post("/refresh", h.Refresh)
 		r.Post("/logout", h.Logout)
 		// Google sign-in is two top-level navigations: out to the consent screen,
 		// back to the callback. Never fetched.
-		r.Get("/google", h.GoogleStart)
+		// The Google leg ends in a token exchange with Google on our dial, so it
+		// is worth bounding too — but loosely: it is a navigation, not a form.
+		limited(r, limits.Refresh, limits.TrustProxy).Get("/google", h.GoogleStart)
 		r.Get("/google/callback", h.GoogleCallback)
 		// Changing a password needs a live session, not a PAT.
-		r.With(gate.Middleware, gate.Scope("")).Post("/password", h.ChangePassword)
+		r.With(limit(limits.Auth, limits.TrustProxy), gate.Middleware, gate.Scope("")).
+			Post("/password", h.ChangePassword)
 	})
 }
 

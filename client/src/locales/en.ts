@@ -176,6 +176,7 @@ const en: typeof cs = {
     invalid_entry: "An item needs a name and a quantity above zero.",
     unauthorized: "Please sign in again.",
     forbidden: "You are not allowed to do that.",
+    too_many_requests: "Too many attempts. Wait a moment and try again.",
     unknown: "Something went wrong. Please try again.",
   },
 };

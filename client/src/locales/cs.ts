@@ -175,6 +175,7 @@ export default {
     invalid_entry: "Položka potřebuje název a množství větší než nula.",
     unauthorized: "Přihlaste se prosím znovu.",
     forbidden: "K této akci nemáte oprávnění.",
+    too_many_requests: "Příliš mnoho pokusů. Chvíli počkejte a zkuste to znovu.",
     unknown: "Něco se pokazilo. Zkus to prosím znovu.",
   },
 };

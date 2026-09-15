@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,20 @@ type Config struct {
 	// Google. The seed tool creates the dev account through the service directly,
 	// so it is unaffected by this.
 	AllowRegistration bool
+
+	// AuthRateLimit caps how many sign-in attempts one client IP may make in
+	// AuthRateWindow. Every attempt costs a bcrypt hash, so this bounds guessing
+	// and CPU burn alike. Configurable mostly so you can raise it if you ever
+	// lock yourself out.
+	AuthRateLimit  int
+	AuthRateWindow time.Duration
+
+	// TrustProxy says whether X-Forwarded-For may be believed when identifying a
+	// caller. True behind our own reverse proxy, false when the server is exposed
+	// directly — where anyone could otherwise hand themselves a fresh rate-limit
+	// bucket per request. Defaults the same way SecureCookies does: on in the
+	// Docker image (which always runs behind Caddy), off in local dev.
+	TrustProxy bool
 }
 
 // The one account allowed to sign in with Google. Override with
@@ -74,6 +89,10 @@ func Load() Config {
 		GoogleAllowedEmails: allowedEmails(),
 
 		AllowRegistration: boolEnv("ALLOW_REGISTRATION", false),
+
+		AuthRateLimit:  intEnv("AUTH_RATE_LIMIT", 10),
+		AuthRateWindow: duration("AUTH_RATE_WINDOW", 15*time.Minute),
+		TrustProxy:     boolEnv("TRUST_PROXY", os.Getenv("CLIENT_DIR") != ""),
 	}
 }
 
@@ -120,6 +139,19 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func intEnv(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		slog.Warn("ignoring invalid value", "key", key, "value", v)
+		return fallback
+	}
+	return n
 }
 
 func duration(key string, fallback time.Duration) time.Duration {

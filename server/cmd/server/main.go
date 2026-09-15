@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Meizuno/calories/config"
+	"github.com/Meizuno/calories/internal/ratelimit"
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store"
 	"github.com/Meizuno/calories/internal/web"
@@ -64,12 +65,25 @@ func main() {
 	h := web.NewHandlers(diary, catalog, profiles, tokens, auth, authsvc, google, cfg.GoogleAllowedEmails, cfg.AllowRegistration)
 	gate := web.NewGate(auth, profiles, tokens)
 
+	// Rate limits, built once and shared: the auth routes are mounted at both
+	// /api/v1/auth and /api/auth, and a limiter per mount would silently double
+	// everyone's allowance. Refresh is deliberately far looser than sign-in —
+	// rotating a session is ordinary traffic, and several tabs waking together
+	// must not lock someone out of their own app.
+	limits := web.Limits{
+		Auth:       ratelimit.New(cfg.AuthRateLimit, cfg.AuthRateWindow),
+		Refresh:    ratelimit.New(cfg.AuthRateLimit*6, cfg.AuthRateWindow),
+		TrustProxy: cfg.TrustProxy,
+	}
+	slog.Info("auth rate limit",
+		"attempts", cfg.AuthRateLimit, "per", cfg.AuthRateWindow, "trustProxy", cfg.TrustProxy)
+
 	// Spent refresh rows accumulate as sessions rotate; drop the long-expired ones
 	// daily so the table stays small.
 	go purgeExpiredTokens(ctx, authsvc)
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           web.NewRouter(h, gate, cfg.ClientDir),
+		Handler:           web.NewRouter(h, gate, cfg.ClientDir, limits),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
