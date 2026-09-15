@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { type DateValue, getLocalTimeZone, parseDate, today } from "@internationalized/date";
 import { api } from "../lib/api";
 import type { Day } from "../lib/types";
 import DaySummary from "../components/DaySummary.vue";
+import DayNav from "../components/DayNav.vue";
 import WeekTrend from "../components/WeekTrend.vue";
 import { useMediaQuery } from "../composables/useMediaQuery";
 import { useUiSize } from "../composables/useUiSize";
 import MealTable from "../components/MealTable.vue";
-import { t, weekdayShort } from "../lib/i18n";
+import { t } from "../lib/i18n";
 
 const route = useRoute();
 const router = useRouter();
@@ -33,12 +33,6 @@ const date = computed(() => {
 });
 const isToday = computed(() => date.value === todayISO());
 
-function shiftDate(d: string, n: number) {
-  const t = new Date(d + "T00:00:00Z");
-  t.setUTCDate(t.getUTCDate() + n);
-  return t.toISOString().slice(0, 10);
-}
-const weekday = (d: string) => weekdayShort(d);
 const k = (n: number) => Math.round(n);
 
 function goto(d: string) {
@@ -49,19 +43,8 @@ function goto(d: string) {
 const day = ref<Day | null>(null);
 const open = ref<string[]>([]);
 
-// Calendar: which days are navigable (have data), and popover state.
+// Which days the calendar in <DayNav> should offer: the ones with data.
 const days = ref<Set<string>>(new Set());
-const calOpen = ref(false);
-const calValue = computed(() => parseDate(date.value));
-const maxDate = today(getLocalTimeZone()); // no future days
-function isUnavailable(d: DateValue) {
-  return !days.value.has(d.toString());
-}
-function pickDate(value: DateValue | undefined) {
-  if (!value) return;
-  calOpen.value = false;
-  goto(value.toString());
-}
 
 // inline-edit state
 const editingMeal = ref<number | null>(null);
@@ -211,63 +194,11 @@ async function onUpdateEntry(
                column it stays reachable while the meals scroll. Wraps to a
                second line in the narrow sidebar. -->
           <template #header>
-            <div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-              <div class="flex min-w-0 items-center gap-0.5">
-                <UButton
-                  :size="inline"
-                  color="neutral"
-                  variant="ghost"
-                  icon="i-ui-prev"
-                  :aria-label="t('common.previous')"
-                  @click="goto(shiftDate(date, -1))"
-                />
-                <span class="truncate px-1 text-base font-semibold tabular-nums">
-                  {{ date }} <span class="font-normal text-gray-400">({{ weekday(date) }})</span>
-                </span>
-                <UButton
-                  :size="inline"
-                  color="neutral"
-                  variant="ghost"
-                  icon="i-ui-next"
-                  :disabled="isToday"
-                  :aria-label="t('common.next')"
-                  @click="goto(shiftDate(date, 1))"
-                />
-              </div>
-
-              <div class="ml-auto flex items-center gap-1">
-                <UButton
-                  :size="inline"
-                  color="neutral"
-                  variant="soft"
-                  :label="t('common.today')"
-                  :disabled="isToday"
-                  @click="goto(todayISO())"
-                />
-                <UPopover v-model:open="calOpen">
-                  <UButton
-                    :size="inline"
-                    color="neutral"
-                    variant="soft"
-                    icon="i-ui-calendar"
-                    :aria-label="t('diary.openCalendar')"
-                  />
-                  <template #content>
-                    <UCalendar
-                      :model-value="calValue"
-                      :max-value="maxDate"
-                      :is-date-unavailable="isUnavailable"
-                      class="p-2"
-                      @update:model-value="pickDate"
-                    />
-                  </template>
-                </UPopover>
-              </div>
-            </div>
+            <DayNav :date="date" :days="days" @update:date="goto" />
           </template>
         </DaySummary>
 
-        <WeekTrend v-if="isWide" :date="date" class="mt-5 block" />
+        <WeekTrend v-if="isWide" :date="date" class="mt-5 block" @pick-day="goto" />
       </aside>
 
       <div class="order-2 space-y-4 xl:order-1">

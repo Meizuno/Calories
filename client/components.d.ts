@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    DayNav: typeof import('./src/components/DayNav.vue')['default']
     DaySummary: typeof import('./src/components/DaySummary.vue')['default']
     LocaleToggle: typeof import('./src/components/LocaleToggle.vue')['default']
     MacroBars: typeof import('./src/components/MacroBars.vue')['default']
