@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestCopyMeal(t *testing.T) {
 	src := day("2026-03-02")
 	dst := day("2026-03-09")
 
-	mealID, err := diary.LogMeal(ctx, pid, src, "Breakfast", "with honey", []service.EntryInput{
+	mealID, err := diary.CreateMeal(ctx, pid, src, "Breakfast", "with honey", []service.EntryInput{
 		{Name: "Oats", Unit: "g", Quantity: 80, Kcal: 300, Carb: 52, Protein: 10, Fat: 6},
 		{Name: "Milk", Unit: "ml", Quantity: 200, Kcal: 96, Carb: 9.6, Protein: 6.6, Fat: 3.4},
 	})
@@ -146,4 +147,83 @@ func deref(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+// An id that names nothing this profile owns must be reported, not shrugged at.
+// These used to succeed silently: a scoped UPDATE or DELETE that matches no row
+// is not an error to the database, so the API answered 200 and the caller had
+// no way to tell the write had not happened.
+func TestMissingRowsAreReported(t *testing.T) {
+	diary, auth, profiles, _ := newDiary(t)
+	ctx := context.Background()
+	mine := profileFor(t, auth, profiles, "owner@example.com")
+	theirs := profileFor(t, auth, profiles, "someone-else@example.com")
+
+	date := day("2026-04-01")
+	mealID, err := diary.CreateMeal(ctx, mine, date, "Lunch", "", []service.EntryInput{
+		{Name: "Soup", Unit: "ml", Quantity: 300, Kcal: 120},
+	})
+	if err != nil {
+		t.Fatalf("seed meal: %v", err)
+	}
+	view, err := diary.GetDayView(ctx, mine, date)
+	if err != nil {
+		t.Fatalf("read day: %v", err)
+	}
+	entryID := view.Meals[0].Entries[0].ID
+
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{"update a meal that does not exist", func() error {
+			return diary.UpdateMeal(ctx, mine, 9_000_001, "X", "")
+		}},
+		{"delete a meal that does not exist", func() error {
+			return diary.DeleteMeal(ctx, mine, 9_000_001)
+		}},
+		{"update an entry that does not exist", func() error {
+			return diary.UpdateEntry(ctx, mine, 9_000_001, "X", "g", 1, 0, 0, 0, 0)
+		}},
+		{"delete an entry that does not exist", func() error {
+			return diary.DeleteEntry(ctx, mine, 9_000_001)
+		}},
+		// Someone else's row is reported the same way as one that is not there.
+		// Distinguishing them is how an id becomes enumerable.
+		{"update someone else's meal", func() error {
+			return diary.UpdateMeal(ctx, theirs, mealID, "X", "")
+		}},
+		{"delete someone else's meal", func() error {
+			return diary.DeleteMeal(ctx, theirs, mealID)
+		}},
+		{"update someone else's entry", func() error {
+			return diary.UpdateEntry(ctx, theirs, entryID, "X", "g", 1, 0, 0, 0, 0)
+		}},
+		{"delete someone else's entry", func() error {
+			return diary.DeleteEntry(ctx, theirs, entryID)
+		}},
+		{"add an entry to someone else's meal", func() error {
+			return diary.AddAdhocEntry(ctx, theirs, mealID, "X", "g", 1, 0, 0, 0, 0)
+		}},
+		{"copy someone else's meal", func() error {
+			_, err := diary.CopyMeal(ctx, theirs, mealID, date)
+			return err
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.run(); !errors.Is(err, service.ErrNotFound) {
+				t.Errorf("err = %v, want service.ErrNotFound", err)
+			}
+		})
+	}
+
+	// And none of that touched the real meal.
+	after, err := diary.GetDayView(ctx, mine, date)
+	if err != nil {
+		t.Fatalf("re-read day: %v", err)
+	}
+	if len(after.Meals) != 1 || after.Meals[0].Meal.Name != "Lunch" || len(after.Meals[0].Entries) != 1 {
+		t.Fatalf("the owner's meal was disturbed: %+v", after.Meals)
+	}
 }

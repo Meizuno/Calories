@@ -2,6 +2,8 @@ import { reactive } from "vue";
 import type { Profile, SessionUser } from "./types";
 import { apiFetch, postJSON, setAuthLostHandler } from "./http";
 
+const V1 = "/api/v1";
+
 interface SessionState {
   loaded: boolean;
   authenticated: boolean;
@@ -21,9 +23,12 @@ interface SessionResponse {
   profile?: Profile;
 }
 
-// Single source of truth for the auth/session state, mirrored from /api/session.
-// Auth is owned by this app: /api/auth/register and /api/auth/login set the
-// cookie pair, /api/auth/refresh rotates it, /api/auth/logout revokes it.
+// Single source of truth for the auth/session state, mirrored from the API's
+// /session. Auth is owned by this app: /auth/register and /auth/login set the
+// cookie pair, /auth/refresh rotates it, /auth/logout revokes it.
+//
+// The session endpoints answer inside a {"session": …} envelope, like every
+// other route; `session` below unwraps it.
 export const session = reactive<SessionState>({
   loaded: false,
   authenticated: false,
@@ -53,7 +58,7 @@ export async function loadSession(force = false) {
   try {
     // noRetry: /api/session answers 200 either way and renews the session itself
     // when the access token has expired, so a failure here is a real error.
-    adopt(await apiFetch<SessionResponse>("/api/session", { noRetry: true }));
+    adopt((await apiFetch<{ session: SessionResponse }>(`${V1}/session`, { noRetry: true })).session);
   } catch {
     clear();
     session.loaded = true;
@@ -61,26 +66,26 @@ export async function loadSession(force = false) {
 }
 
 export async function register(email: string, password: string, name: string) {
-  adopt(await postJSON<SessionResponse>("/api/auth/register", { email, password, name }, { noRetry: true }));
+  adopt((await postJSON<{ session: SessionResponse }>(`${V1}/auth/register`, { email, password, name }, { noRetry: true })).session);
 }
 
 export async function login(email: string, password: string) {
-  adopt(await postJSON<SessionResponse>("/api/auth/login", { email, password }, { noRetry: true }));
+  adopt((await postJSON<{ session: SessionResponse }>(`${V1}/auth/login`, { email, password }, { noRetry: true })).session);
 }
 
 export async function changePassword(current: string, next: string) {
-  adopt(await postJSON<SessionResponse>("/api/auth/password", { current, new: next }));
+  adopt((await postJSON<{ session: SessionResponse }>(`${V1}/auth/password`, { current, new: next })).session);
 }
 
 // Google sign-in needs a top-level navigation — a consent screen cannot render
 // inside a fetch. The server sets the state cookie and redirects on from there.
 export function loginWithGoogle(returnTo = currentPath()) {
-  window.location.assign(`/api/auth/google?return=${encodeURIComponent(returnTo)}`);
+  window.location.assign(`${V1}/auth/google?return=${encodeURIComponent(returnTo)}`);
 }
 
 export async function logout() {
   try {
-    await apiFetch("/api/auth/logout", { method: "POST", noRetry: true });
+    await apiFetch(`${V1}/auth/logout`, { method: "POST", noRetry: true });
   } catch {
     // Ignore network errors — the local state is dropped either way.
   }

@@ -78,5 +78,5 @@ func (c *Catalog) Remember(ctx context.Context, profileID int64, name, unit stri
 }
 
 func (c *Catalog) Delete(ctx context.Context, profileID, id int64) error {
-	return c.q.DeleteFood(ctx, db.DeleteFoodParams{ID: id, ProfileID: profileID})
+	return notFound(c.q.DeleteFood(ctx, db.DeleteFoodParams{ID: id, ProfileID: profileID}))
 }

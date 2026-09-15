@@ -3,6 +3,8 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,7 +14,6 @@ import (
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store/db"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -118,368 +119,6 @@ func dayDTO(dv service.DayView) dayResp {
 	}
 }
 
-// ── Diary endpoints (mutations return the refreshed day) ─────────────────────
-
-func (h *Handlers) GetDay(w http.ResponseWriter, r *http.Request) {
-	h.respondDay(w, r, ProfileID(r.Context()), parseDate(r.URL.Query().Get("date")))
-}
-
-func (h *Handlers) AddMeal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date string `json:"date"`
-		Name string `json:"name"`
-		Note string `json:"note"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid, date := ProfileID(r.Context()), parseDate(req.Date)
-	if req.Name != "" {
-		_ = h.diary.AddMeal(r.Context(), pid, date, req.Name, strings.TrimSpace(req.Note))
-	}
-	h.respondDay(w, r, pid, date)
-}
-
-func (h *Handlers) UpdateMeal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date string `json:"date"`
-		Name string `json:"name"`
-		Note string `json:"note"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid := ProfileID(r.Context())
-	if name := strings.TrimSpace(req.Name); name != "" {
-		_ = h.diary.UpdateMeal(r.Context(), pid, idParam(r), name, strings.TrimSpace(req.Note))
-	}
-	h.respondDay(w, r, pid, parseDate(req.Date))
-}
-
-func (h *Handlers) DeleteMeal(w http.ResponseWriter, r *http.Request) {
-	pid := ProfileID(r.Context())
-	_ = h.diary.DeleteMeal(r.Context(), pid, idParam(r))
-	h.respondDay(w, r, pid, parseDate(r.URL.Query().Get("date")))
-}
-
-func (h *Handlers) AddEntry(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date     string  `json:"date"`
-		MealID   int64   `json:"mealId"`
-		Name     string  `json:"name"`
-		Quantity float64 `json:"quantity"`
-		Unit     string  `json:"unit"`
-		Kcal     float64 `json:"kcal"`
-		Carb     float64 `json:"carb"`
-		Protein  float64 `json:"protein"`
-		Fat      float64 `json:"fat"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid, date := ProfileID(r.Context()), parseDate(req.Date)
-	name := strings.TrimSpace(req.Name)
-	if req.MealID > 0 && name != "" && req.Quantity > 0 {
-		_ = h.diary.AddAdhocEntry(r.Context(), pid, req.MealID, name, req.Unit,
-			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
-		// Logging an item is also how the app learns the food. Best effort: a
-		// failed memory must never cost someone the entry they just logged.
-		_ = h.catalog.Remember(r.Context(), pid, name, req.Unit,
-			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
-	}
-	h.respondDay(w, r, pid, date)
-}
-
-// nonNeg clamps user-supplied macros to >= 0 (defence in depth; the client also guards).
-func nonNeg(f float64) float64 {
-	if f < 0 {
-		return 0
-	}
-	return f
-}
-
-func (h *Handlers) UpdateEntry(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date     string  `json:"date"`
-		Name     string  `json:"name"`
-		Quantity float64 `json:"quantity"`
-		Unit     string  `json:"unit"`
-		Kcal     float64 `json:"kcal"`
-		Carb     float64 `json:"carb"`
-		Protein  float64 `json:"protein"`
-		Fat      float64 `json:"fat"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid := ProfileID(r.Context())
-	if name := strings.TrimSpace(req.Name); name != "" && req.Quantity > 0 {
-		_ = h.diary.UpdateEntry(r.Context(), pid, idParam(r), name, req.Unit,
-			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
-		// Correcting a line corrects what we remember about the food too, which
-		// is how a wrong value gets fixed for every suggestion that follows.
-		_ = h.catalog.Remember(r.Context(), pid, name, req.Unit,
-			req.Quantity, nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat))
-	}
-	h.respondDay(w, r, pid, parseDate(req.Date))
-}
-
-func (h *Handlers) DeleteEntry(w http.ResponseWriter, r *http.Request) {
-	pid := ProfileID(r.Context())
-	_ = h.diary.DeleteEntry(r.Context(), pid, idParam(r))
-	h.respondDay(w, r, pid, parseDate(r.URL.Query().Get("date")))
-}
-
-// CopyMeal duplicates a meal onto another day, entries and all. Responds with
-// the day it was copied INTO, not the one it came from: the copy is the thing
-// the caller just changed, and is what they will want to look at next.
-func (h *Handlers) CopyMeal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date string `json:"date"` // the day to copy INTO
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid, to := ProfileID(r.Context()), parseDate(req.Date)
-	if _, err := h.diary.CopyMeal(r.Context(), pid, idParam(r), to); err != nil {
-		// A meal id that is not this profile's reads as simply not there.
-		if errors.Is(err, pgx.ErrNoRows) {
-			http.Error(w, "meal not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.respondDay(w, r, pid, to)
-}
-
-// ListDays returns every date (YYYY-MM-DD) that has logged data, so the SPA can
-// enable only those days in the calendar.
-func (h *Handlers) ListDays(w http.ResponseWriter, r *http.Request) {
-	days, err := h.diary.ListDays(r.Context(), ProfileID(r.Context()))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	out := make([]string, len(days))
-	for i, d := range days {
-		out[i] = d.Format("2006-01-02")
-	}
-	writeJSON(w, out)
-}
-
-type dayTotalResp struct {
-	Date    string  `json:"date"`
-	Kcal    float64 `json:"kcal"`
-	Carb    float64 `json:"carb"`
-	Protein float64 `json:"protein"`
-	Fat     float64 `json:"fat"`
-}
-
-type statsResp struct {
-	From string         `json:"from"`
-	To   string         `json:"to"`
-	Goal macros         `json:"goal"`
-	Days []dayTotalResp `json:"days"`
-}
-
-// statsRange parses ?from=&to= (YYYY-MM-DD, inclusive), swaps reversed bounds,
-// and caps the window at one year so a hand-crafted range can't ask for an
-// unbounded scan.
-func statsRange(r *http.Request) (from, to time.Time) {
-	q := r.URL.Query()
-	from, to = parseDate(q.Get("from")), parseDate(q.Get("to"))
-	if from.After(to) {
-		from, to = to, from
-	}
-	if earliest := to.AddDate(-1, 0, 0); from.Before(earliest) {
-		from = earliest
-	}
-	return from, to
-}
-
-func writeStats(w http.ResponseWriter, sv service.StatsView) {
-	days := make([]dayTotalResp, 0, len(sv.Days))
-	for _, d := range sv.Days {
-		days = append(days, dayTotalResp{
-			Date:    d.Date.Format("2006-01-02"),
-			Kcal:    d.Totals.Kcal,
-			Carb:    d.Totals.Carb,
-			Protein: d.Totals.Protein,
-			Fat:     d.Totals.Fat,
-		})
-	}
-	writeJSON(w, statsResp{
-		From: sv.From.Format("2006-01-02"),
-		To:   sv.To.Format("2006-01-02"),
-		Goal: mac(sv.Goal),
-		Days: days,
-	})
-}
-
-// GetStats returns per-day macro totals for the authenticated profile plus its
-// daily goal, over ?from=&to=.
-func (h *Handlers) GetStats(w http.ResponseWriter, r *http.Request) {
-	from, to := statsRange(r)
-	sv, err := h.diary.GetStats(r.Context(), ProfileID(r.Context()), from, to)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeStats(w, sv)
-}
-
-// SharedStats is the public, read-only counterpart of GetStats for a profile
-// that opted into sharing, addressed by its public uuid.
-func (h *Handlers) SharedStats(w http.ResponseWriter, r *http.Request) {
-	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	from, to := statsRange(r)
-	sv, err := h.diary.GetStats(r.Context(), prof.ID, from, to)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeStats(w, sv)
-}
-
-// SharedDays lists the dates with logged data for a shared profile — used by the
-// stats view to disable stepping back past the earliest entry.
-func (h *Handlers) SharedDays(w http.ResponseWriter, r *http.Request) {
-	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	days, err := h.diary.ListDays(r.Context(), prof.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	out := make([]string, len(days))
-	for i, d := range days {
-		out[i] = d.Format("2006-01-02")
-	}
-	writeJSON(w, out)
-}
-
-func (h *Handlers) respondDay(w http.ResponseWriter, r *http.Request, profileID int64, date time.Time) {
-	dv, err := h.diary.GetDayView(r.Context(), profileID, date)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, dayDTO(dv))
-}
-
-// LogMeal (PAT only, scope "add") creates a whole meal in one request — name,
-// optional note and its ad-hoc entries. This is the endpoint a chat assistant
-// posts to; see the README for the body schema. Responds with the updated day.
-func (h *Handlers) LogMeal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Date    string `json:"date"`
-		Meal    string `json:"meal"`
-		Note    string `json:"note"`
-		Entries []struct {
-			Name     string  `json:"name"`
-			Quantity float64 `json:"quantity"`
-			Unit     string  `json:"unit"`
-			Kcal     float64 `json:"kcal"`
-			Carb     float64 `json:"carb"`
-			Protein  float64 `json:"protein"`
-			Fat      float64 `json:"fat"`
-		} `json:"entries"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	name := strings.TrimSpace(req.Meal)
-	if name == "" {
-		http.Error(w, "meal name is required", http.StatusBadRequest)
-		return
-	}
-	entries := make([]service.EntryInput, 0, len(req.Entries))
-	for _, e := range req.Entries {
-		n := strings.TrimSpace(e.Name)
-		if n == "" || e.Quantity <= 0 {
-			continue
-		}
-		entries = append(entries, service.EntryInput{
-			Name:     n,
-			Unit:     strings.TrimSpace(e.Unit),
-			Quantity: e.Quantity,
-			Kcal:     nonNeg(e.Kcal),
-			Carb:     nonNeg(e.Carb),
-			Protein:  nonNeg(e.Protein),
-			Fat:      nonNeg(e.Fat),
-		})
-	}
-	if len(entries) == 0 {
-		http.Error(w, "at least one entry with a name and positive quantity is required", http.StatusBadRequest)
-		return
-	}
-	pid, date := ProfileID(r.Context()), parseDate(req.Date)
-	if _, err := h.diary.LogMeal(r.Context(), pid, date, name, strings.TrimSpace(req.Note), entries); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.respondDay(w, r, pid, date)
-}
-
-// ── Catalog endpoints ────────────────────────────────────────────────────────
-
-func (h *Handlers) ListFoods(w http.ResponseWriter, r *http.Request) {
-	h.respondFoods(w, r, ProfileID(r.Context()))
-}
-
-func (h *Handlers) CreateFood(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Name        string  `json:"name"`
-		BasisUnit   string  `json:"basisUnit"`
-		BasisAmount float64 `json:"basisAmount"`
-		Kcal        float64 `json:"kcal"`
-		Carb        float64 `json:"carb"`
-		Protein     float64 `json:"protein"`
-		Fat         float64 `json:"fat"`
-	}
-	if !decode(w, r, &req) {
-		return
-	}
-	pid := ProfileID(r.Context())
-	if req.BasisUnit == "" {
-		req.BasisUnit = "g"
-	}
-	if req.BasisAmount <= 0 {
-		req.BasisAmount = 100
-	}
-	if req.Name != "" {
-		_ = h.catalog.Create(r.Context(), pid, req.Name, req.BasisUnit, req.BasisAmount, req.Kcal, req.Carb, req.Protein, req.Fat)
-	}
-	h.respondFoods(w, r, pid)
-}
-
-func (h *Handlers) DeleteFood(w http.ResponseWriter, r *http.Request) {
-	pid := ProfileID(r.Context())
-	_ = h.catalog.Delete(r.Context(), pid, idParam(r))
-	h.respondFoods(w, r, pid)
-}
-
-func (h *Handlers) respondFoods(w http.ResponseWriter, r *http.Request, profileID int64) {
-	foods, err := h.catalog.List(r.Context(), profileID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	out := make([]foodResp, 0, len(foods))
-	for _, f := range foods {
-		out = append(out, foodResp{f.ID, f.Name, f.BasisUnit, f.BasisAmount, f.Kcal, f.Carb, f.Protein, f.Fat})
-	}
-	writeJSON(w, out)
-}
-
 // ── Profile + session endpoints ──────────────────────────────────────────────
 
 type profileResp struct {
@@ -509,11 +148,11 @@ func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
 	// to the sign-in screen.
 	uid := h.auth.ResolveWithRefresh(w, r)
 	if uid == "" {
-		writeJSON(w, map[string]any{
+		writeJSON(w, map[string]any{"session": map[string]any{
 			"authenticated": false,
 			"google":        h.google != nil,
 			"registration":  h.allowRegistration,
-		})
+		}})
 		return
 	}
 	h.writeSession(w, r, uid)
@@ -524,20 +163,20 @@ func (h *Handlers) Session(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) writeSession(w http.ResponseWriter, r *http.Request, userID string) {
 	user, err := h.authsvc.GetUser(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "could not load account", http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
 	prof, err := h.profiles.Ensure(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "could not load profile", http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
 	providers, err := h.authsvc.Providers(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "could not load account", http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
-	writeJSON(w, map[string]any{
+	writeJSON(w, map[string]any{"session": map[string]any{
 		"authenticated": true,
 		"google":        h.google != nil,
 		"registration":  h.allowRegistration,
@@ -548,16 +187,16 @@ func (h *Handlers) writeSession(w http.ResponseWriter, r *http.Request, userID s
 			"providers":   providers,
 		},
 		"profile": profileDTO(prof),
-	})
+	}})
 }
 
 func (h *Handlers) GetMyProfile(w http.ResponseWriter, r *http.Request) {
 	prof, err := h.profiles.Get(r.Context(), ProfileID(r.Context()))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
-	writeJSON(w, profileDTO(prof))
+	writeJSON(w, map[string]any{"profile": profileDTO(prof)})
 }
 
 func (h *Handlers) SaveProfile(w http.ResponseWriter, r *http.Request) {
@@ -575,35 +214,10 @@ func (h *Handlers) SaveProfile(w http.ResponseWriter, r *http.Request) {
 	prof, err := h.profiles.Save(r.Context(), ProfileID(r.Context()), strings.TrimSpace(req.Name),
 		nonNeg(req.Kcal), nonNeg(req.Carb), nonNeg(req.Protein), nonNeg(req.Fat), req.Shared)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
-	writeJSON(w, profileDTO(prof))
-}
-
-// SharedProfile / SharedDay are public, read-only views of a profile that has
-// opted into sharing (shared = true), addressed by its public uuid.
-func (h *Handlers) SharedProfile(w http.ResponseWriter, r *http.Request) {
-	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	writeJSON(w, profileDTO(prof))
-}
-
-func (h *Handlers) SharedDay(w http.ResponseWriter, r *http.Request) {
-	prof, err := h.profiles.GetShared(r.Context(), chi.URLParam(r, "uuid"))
-	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-	dv, err := h.diary.GetDayView(r.Context(), prof.ID, parseDate(r.URL.Query().Get("date")))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, dayDTO(dv))
+	writeJSON(w, map[string]any{"profile": profileDTO(prof)})
 }
 
 // ── Personal access tokens (full-session only) ───────────────────────────────
@@ -643,14 +257,14 @@ func patDTO(p db.PersonalAccessToken) patResp {
 func (h *Handlers) listPatsJSON(w http.ResponseWriter, r *http.Request, profileID int64) {
 	rows, err := h.tokens.List(r.Context(), profileID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
 	out := make([]patResp, 0, len(rows))
 	for _, p := range rows {
 		out = append(out, patDTO(p))
 	}
-	writeJSON(w, out)
+	writeJSON(w, map[string]any{"pats": out})
 }
 
 func (h *Handlers) ListPats(w http.ResponseWriter, r *http.Request) {
@@ -669,7 +283,7 @@ func (h *Handlers) CreatePat(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	scopes := service.CleanScopes(req.Scopes)
 	if name == "" || len(scopes) == 0 {
-		http.Error(w, "name and at least one scope are required", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "invalid_token_request", "a token needs a name and at least one scope")
 		return
 	}
 	var exp *time.Time
@@ -680,7 +294,7 @@ func (h *Handlers) CreatePat(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, row, err := h.tokens.Create(r.Context(), ProfileID(r.Context()), name, scopes, exp)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
 	// The raw token is returned exactly once, here.
@@ -690,7 +304,7 @@ func (h *Handlers) CreatePat(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) RevokePat(w http.ResponseWriter, r *http.Request) {
 	pid := ProfileID(r.Context())
 	if err := h.tokens.Revoke(r.Context(), pid, idParam(r)); err != nil && !errors.Is(err, service.ErrTokenNotFound) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		apiError(w, r, err)
 		return
 	}
 	h.listPatsJSON(w, r, pid)
@@ -712,9 +326,23 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"code": code, "message": message})
 }
 
+// drain reads whatever is left of the request body and throws it away.
+//
+// Rejecting a request before anything reads its body — the Gate turning away an
+// expired session, a decoder giving up halfway — leaves bytes in flight. Go
+// then closes the connection rather than finishing the exchange, and the caller
+// sees a reset instead of the 401 or 400 that was actually written. Draining
+// first lets the response land.
+func drain(r *http.Request) {
+	if r.Body != nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+	}
+}
+
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		drain(r)
+		writeError(w, http.StatusBadRequest, "invalid_body", "the request body is not valid JSON")
 		return false
 	}
 	return true
@@ -725,10 +353,57 @@ func idParam(r *http.Request) int64 {
 	return n
 }
 
-func parseDate(s string) time.Time {
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+// parseDate reads a YYYY-MM-DD day. An empty value means today, which is the
+// useful default for "just show me now". Anything else that will not parse is
+// an error: it used to fall back to today as well, so a typo in a date wrote to
+// the wrong day and said nothing.
+//
+// Days are UTC calendar dates. The server cannot know the caller's timezone, so
+// clients send the date they mean rather than relying on this.
+func parseDate(s string) (time.Time, error) {
+	if s == "" {
+		now := time.Now().UTC()
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), nil
 	}
-	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, errBadDate
+	}
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+}
+
+var errBadDate = errors.New("date must be YYYY-MM-DD")
+
+func badDate(w http.ResponseWriter) {
+	writeError(w, http.StatusBadRequest, "invalid_date", errBadDate.Error())
+}
+
+// nonNeg clamps user-supplied macros to >= 0 (defence in depth; clients guard too).
+func nonNeg(f float64) float64 {
+	if f < 0 {
+		return 0
+	}
+	return f
+}
+
+// apiError turns a service error into the one response shape the API uses. An
+// id that names nothing this caller owns is a 404 whether it does not exist or
+// merely is not theirs — saying which would let anyone enumerate other people's
+// rows. Anything unrecognised is logged here and reported as a bare 500: pgx
+// error text names tables, constraints and sometimes values, and none of that
+// belongs in a response.
+func apiError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrNotFound):
+		writeError(w, http.StatusNotFound, "not_found", "no such item")
+	case errors.Is(err, errBadDate):
+		badDate(w)
+	default:
+		logRequestError(r, "unhandled", err)
+		writeError(w, http.StatusInternalServerError, "internal", "something went wrong")
+	}
+}
+
+func logRequestError(r *http.Request, what string, err error) {
+	slog.Error("api error", "what", what, "method", r.Method, "path", r.URL.Path, "err", err)
 }

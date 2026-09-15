@@ -27,5 +27,5 @@ SET name         = EXCLUDED.name,
     fat          = EXCLUDED.fat,
     updated_at   = now();
 
--- name: DeleteFood :exec
+-- name: DeleteFood :execrows
 DELETE FROM foods WHERE id = $1 AND profile_id = $2;

@@ -154,11 +154,10 @@ async function addMeal() {
 }
 async function addEntry() {
   const q = parseFloat(entry.value.quantity);
-  if (!canAddEntry.value) return;
+  const meal = mealId.value;
+  if (!canAddEntry.value || !meal) return;
   const name = entry.value.name.trim();
-  day.value = await api.addEntry({
-    date: date.value,
-    mealId: mealId.value,
+  day.value = await api.addEntry(date.value, meal, {
     name,
     quantity: q,
     unit: entry.value.unit || "g",

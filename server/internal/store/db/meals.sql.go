@@ -42,7 +42,7 @@ func (q *Queries) CreateMeal(ctx context.Context, arg CreateMealParams) (Meal, e
 	return i, err
 }
 
-const deleteMeal = `-- name: DeleteMeal :exec
+const deleteMeal = `-- name: DeleteMeal :execrows
 DELETE FROM meals WHERE id = $1 AND profile_id = $2
 `
 
@@ -51,9 +51,12 @@ type DeleteMealParams struct {
 	ProfileID int64
 }
 
-func (q *Queries) DeleteMeal(ctx context.Context, arg DeleteMealParams) error {
-	_, err := q.db.Exec(ctx, deleteMeal, arg.ID, arg.ProfileID)
-	return err
+func (q *Queries) DeleteMeal(ctx context.Context, arg DeleteMealParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMeal, arg.ID, arg.ProfileID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getMealForProfile = `-- name: GetMealForProfile :one
@@ -159,7 +162,7 @@ func (q *Queries) MaxMealPosition(ctx context.Context, arg MaxMealPositionParams
 	return pos, err
 }
 
-const updateMeal = `-- name: UpdateMeal :exec
+const updateMeal = `-- name: UpdateMeal :execrows
 UPDATE meals SET name = $3, note = $4 WHERE id = $1 AND profile_id = $2
 `
 
@@ -170,12 +173,15 @@ type UpdateMealParams struct {
 	Note      *string
 }
 
-func (q *Queries) UpdateMeal(ctx context.Context, arg UpdateMealParams) error {
-	_, err := q.db.Exec(ctx, updateMeal,
+func (q *Queries) UpdateMeal(ctx context.Context, arg UpdateMealParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateMeal,
 		arg.ID,
 		arg.ProfileID,
 		arg.Name,
 		arg.Note,
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
