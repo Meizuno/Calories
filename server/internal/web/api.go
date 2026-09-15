@@ -12,6 +12,7 @@ import (
 	"github.com/Meizuno/calories/internal/service"
 	"github.com/Meizuno/calories/internal/store/db"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -219,6 +220,29 @@ func (h *Handlers) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 	pid := ProfileID(r.Context())
 	_ = h.diary.DeleteEntry(r.Context(), pid, idParam(r))
 	h.respondDay(w, r, pid, parseDate(r.URL.Query().Get("date")))
+}
+
+// CopyMeal duplicates a meal onto another day, entries and all. Responds with
+// the day it was copied INTO, not the one it came from: the copy is the thing
+// the caller just changed, and is what they will want to look at next.
+func (h *Handlers) CopyMeal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Date string `json:"date"` // the day to copy INTO
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	pid, to := ProfileID(r.Context()), parseDate(req.Date)
+	if _, err := h.diary.CopyMeal(r.Context(), pid, idParam(r), to); err != nil {
+		// A meal id that is not this profile's reads as simply not there.
+		if errors.Is(err, pgx.ErrNoRows) {
+			http.Error(w, "meal not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.respondDay(w, r, pid, to)
 }
 
 // ListDays returns every date (YYYY-MM-DD) that has logged data, so the SPA can

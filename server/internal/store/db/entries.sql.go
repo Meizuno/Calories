@@ -177,6 +177,42 @@ func (q *Queries) ListEntriesForDay(ctx context.Context, arg ListEntriesForDayPa
 	return items, nil
 }
 
+const listEntriesForMeal = `-- name: ListEntriesForMeal :many
+SELECT id, meal_id, food_id, name, quantity, unit, position, kcal, carb, protein, fat FROM entries WHERE meal_id = $1 ORDER BY position, id
+`
+
+func (q *Queries) ListEntriesForMeal(ctx context.Context, mealID int64) ([]Entry, error) {
+	rows, err := q.db.Query(ctx, listEntriesForMeal, mealID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Entry
+	for rows.Next() {
+		var i Entry
+		if err := rows.Scan(
+			&i.ID,
+			&i.MealID,
+			&i.FoodID,
+			&i.Name,
+			&i.Quantity,
+			&i.Unit,
+			&i.Position,
+			&i.Kcal,
+			&i.Carb,
+			&i.Protein,
+			&i.Fat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const maxEntryPosition = `-- name: MaxEntryPosition :one
 SELECT COALESCE(MAX(position), -1)::int AS pos FROM entries WHERE meal_id = $1
 `

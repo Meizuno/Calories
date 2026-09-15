@@ -66,6 +66,8 @@ func NewRouter(h *Handlers, gate *Gate, clientDir string) http.Handler {
 			r.With(gate.Scope("add")).Post("/meals", h.AddMeal)
 			r.With(gate.Scope("")).Patch("/meals/{id}", h.UpdateMeal)
 			r.With(gate.Scope("")).Delete("/meals/{id}", h.DeleteMeal)
+			// Repeat a meal on another day. "add" scope: it only ever creates.
+			r.With(gate.Scope("add")).Post("/meals/{id}/copy", h.CopyMeal)
 			r.With(gate.Scope("add")).Post("/entries", h.AddEntry)
 			r.With(gate.Scope("")).Patch("/entries/{id}", h.UpdateEntry)
 			r.With(gate.Scope("")).Delete("/entries/{id}", h.DeleteEntry)

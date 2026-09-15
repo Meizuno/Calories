@@ -100,8 +100,8 @@ TEST_DATABASE_URL='postgres://user:pass@localhost:5432/calories_test?sslmode=dis
 
 Vue 3 SPA (Nuxt UI). Routes: `/` welcome (public), `/login` sign-in & sign-up
 (public), `/diary` the day (kcal ring +
-per-macro bars, free-text add/edit-item form, meal accordion with inline rename
-& row editing), `/catalog` the food catalog, `/profiles/me` own profile (also the
+per-macro bars, free-text add/edit-item form, meal accordion with inline rename,
+row editing & copy-this-meal-to-today), `/catalog` the food catalog, `/profiles/me` own profile (also the
 first-run onboarding form), and `/profile/:uuid` a public read-only view of a
 *shared* profile's diary. Charts are dependency-free SVG (`components/RingChart.vue`,
 `MacroBars.vue`).

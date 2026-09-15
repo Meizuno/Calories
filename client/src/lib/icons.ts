@@ -3,6 +3,7 @@ import { svgBody } from "./svg";
 
 import calendar from "../assets/icons/calendar.svg?raw";
 import check from "../assets/icons/check.svg?raw";
+import copy from "../assets/icons/copy.svg?raw";
 import eye from "../assets/icons/eye.svg?raw";
 import eyeOff from "../assets/icons/eye-off.svg?raw";
 import next from "../assets/icons/next.svg?raw";
@@ -30,6 +31,7 @@ addCollection({
     prev: { body: svgBody(prev) },
     next: { body: svgBody(next) },
     check: { body: svgBody(check) },
+    copy: { body: svgBody(copy) },
     warning: { body: svgBody(warning) },
     eye: { body: svgBody(eye) },
     "eye-off": { body: svgBody(eyeOff) },

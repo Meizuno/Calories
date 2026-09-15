@@ -71,6 +71,8 @@ const noteDraft = ref("");
 async function reload() {
   day.value = await api.getDay(date.value);
   cancelEdit();
+  copiedTo.value = {};
+  copyFailed.value = null;
   expandAll();
 }
 // The set of days-with-data only changes when entries are added/removed, so load
@@ -129,6 +131,63 @@ async function saveMeal(id: number) {
   day.value = await api.updateMeal(date.value, id, n, noteDraft.value.trim());
   editingMeal.value = null;
 }
+// ── copying a meal forward ───────────────────────────────────────────────────
+// Eating the same breakfast most mornings should not mean retyping it. Only
+// offered while looking at some other day: on today there is nothing to copy
+// forward to.
+//
+// What happened is reported next to the button that was pressed, not at the top
+// of the page — the meals are a long list, and a confirmation above the fold is
+// a confirmation you never see. Keyed by source meal so each row speaks only
+// for itself.
+const copying = ref<number | null>(null);
+// source meal id → the meal it created on today, which is what undo removes and
+// what stops the same meal being copied twice by an impatient second click.
+const copiedTo = ref<Record<number, number>>({});
+const copyFailed = ref<number | null>(null);
+
+async function copyToToday(meal: { id: number; name: string }) {
+  if (copying.value !== null || copiedTo.value[meal.id]) return;
+  copying.value = meal.id;
+  copyFailed.value = null;
+  try {
+    // The copy is appended to the end of the target day, so it is the last meal
+    // in the day we get back. Holding its id is what makes undo possible.
+    const day = await api.copyMeal(meal.id, todayISO());
+    const created = day.meals[day.meals.length - 1];
+    if (created) copiedTo.value[meal.id] = created.id;
+    // Today has data now, so the calendar should let you back into it.
+    loadDays();
+  } catch {
+    copyFailed.value = meal.id;
+  } finally {
+    copying.value = null;
+  }
+}
+
+// The action is a single control that flips: copy, then take it back. A second
+// click cannot produce a second copy by accident, which matters now that it
+// sits next to edit and delete.
+function toggleCopy(meal: { id: number; name: string }) {
+  if (copiedTo.value[meal.id]) return undoCopy(meal.id);
+  return copyToToday(meal);
+}
+
+// Undo removes the meal the copy created, rather than asking someone to travel
+// to today and delete it by hand. No confirmation: it only ever takes back
+// something added seconds ago.
+async function undoCopy(sourceID: number) {
+  const created = copiedTo.value[sourceID];
+  if (created === undefined) return;
+  delete copiedTo.value[sourceID];
+  try {
+    await api.deleteMeal(todayISO(), created);
+    loadDays();
+  } catch {
+    copyFailed.value = sourceID;
+  }
+}
+
 // Entry editing lives in <MealTable>; it emits the new values, we persist them.
 async function onUpdateEntry(
   id: number,
@@ -235,10 +294,39 @@ async function onUpdateEntry(
       :ui="{ item: 'mb-2 rounded-lg border last:border-b border-gray-200 px-3 dark:border-gray-700' }"
     >
       <template #default="{ item }">
-        <div class="flex grow items-center justify-between gap-3 pr-3">
-          <span class="font-medium">{{ item.meal.name }}</span>
-          <span class="flex items-center gap-3">
+        <div class="flex grow items-center justify-between gap-2 pr-3 sm:gap-3">
+          <span class="min-w-0 truncate font-medium">{{ item.meal.name }}</span>
+          <span class="flex shrink-0 items-center gap-2 sm:gap-3">
             <span class="tabular-nums text-sm font-normal text-gray-500">{{ k(item.meal.total.kcal) }} kcal</span>
+            <!-- Repeating a meal is something you do TO the meal, so it belongs
+                 with rename and delete rather than under the food. One control
+                 that flips: copy, then click again to take it back. -->
+            <span
+              v-if="!isToday"
+              role="button"
+              tabindex="0"
+              class="inline-flex cursor-pointer items-center gap-1 text-sm font-normal transition-colors"
+              :class="[
+                copying === item.meal.id ? 'pointer-events-none opacity-50' : '',
+                copyFailed === item.meal.id
+                  ? 'text-red-500'
+                  : copiedTo[item.meal.id]
+                    ? 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                    : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300',
+              ]"
+              :title="copiedTo[item.meal.id] ? t('diary.undoCopyHint') : t('diary.copyToToday')"
+              @click.stop="toggleCopy(item.meal)"
+              @keydown.enter.stop.prevent="toggleCopy(item.meal)"
+            >
+              <UIcon :name="copiedTo[item.meal.id] ? 'i-ui-check' : 'i-ui-copy'" class="size-3.5 shrink-0" />
+              <span class="hidden sm:inline">{{
+                copyFailed === item.meal.id
+                  ? t("diary.copyFailed")
+                  : copiedTo[item.meal.id]
+                    ? t("diary.copied")
+                    : t("common.copy")
+              }}</span>
+            </span>
             <span
               role="button"
               tabindex="0"

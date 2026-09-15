@@ -86,6 +86,10 @@ const en: typeof cs = {
     confirmDeleteMeal: "Delete this meal and all its items?",
     confirmDeleteEntry: "Delete this item?",
     entryNamePlaceholder: "Name",
+    copyToToday: "Copy to today",
+    copied: "Copied",
+    undoCopyHint: "Copied to today — click to undo",
+    copyFailed: "Not copied",
   },
   log: {
     back: "Diary",
